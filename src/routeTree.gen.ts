@@ -10,11 +10,21 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as TableTableIdRouteImport } from './routes/table.$tableId'
+import { Route as RestaurantSlugRouteImport } from './routes/restaurant.$slug'
+import { Route as ChefChefIdRouteImport } from './routes/chef.$chefId'
+import { Route as AuthenticatedOpsRouteImport } from './routes/_authenticated/ops'
+import { Route as AuthenticatedMeRouteImport } from './routes/_authenticated/me'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedRoute = AuthenticatedRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -22,31 +32,99 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TableTableIdRoute = TableTableIdRouteImport.update({
+  id: '/table/$tableId',
+  path: '/table/$tableId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RestaurantSlugRoute = RestaurantSlugRouteImport.update({
+  id: '/restaurant/$slug',
+  path: '/restaurant/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChefChefIdRoute = ChefChefIdRouteImport.update({
+  id: '/chef/$chefId',
+  path: '/chef/$chefId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedOpsRoute = AuthenticatedOpsRouteImport.update({
+  id: '/ops',
+  path: '/ops',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedMeRoute = AuthenticatedMeRouteImport.update({
+  id: '/me',
+  path: '/me',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/me': typeof AuthenticatedMeRoute
+  '/ops': typeof AuthenticatedOpsRoute
+  '/chef/$chefId': typeof ChefChefIdRoute
+  '/restaurant/$slug': typeof RestaurantSlugRoute
+  '/table/$tableId': typeof TableTableIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/me': typeof AuthenticatedMeRoute
+  '/ops': typeof AuthenticatedOpsRoute
+  '/chef/$chefId': typeof ChefChefIdRoute
+  '/restaurant/$slug': typeof RestaurantSlugRoute
+  '/table/$tableId': typeof TableTableIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/me': typeof AuthenticatedMeRoute
+  '/_authenticated/ops': typeof AuthenticatedOpsRoute
+  '/chef/$chefId': typeof ChefChefIdRoute
+  '/restaurant/$slug': typeof RestaurantSlugRoute
+  '/table/$tableId': typeof TableTableIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/me'
+    | '/ops'
+    | '/chef/$chefId'
+    | '/restaurant/$slug'
+    | '/table/$tableId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth'
-  id: '__root__' | '/' | '/auth'
+  to:
+    | '/'
+    | '/auth'
+    | '/me'
+    | '/ops'
+    | '/chef/$chefId'
+    | '/restaurant/$slug'
+    | '/table/$tableId'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/auth'
+    | '/_authenticated/me'
+    | '/_authenticated/ops'
+    | '/chef/$chefId'
+    | '/restaurant/$slug'
+    | '/table/$tableId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ChefChefIdRoute: typeof ChefChefIdRoute
+  RestaurantSlugRoute: typeof RestaurantSlugRoute
+  TableTableIdRoute: typeof TableTableIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -58,6 +136,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -65,13 +150,76 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/table/$tableId': {
+      id: '/table/$tableId'
+      path: '/table/$tableId'
+      fullPath: '/table/$tableId'
+      preLoaderRoute: typeof TableTableIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/restaurant/$slug': {
+      id: '/restaurant/$slug'
+      path: '/restaurant/$slug'
+      fullPath: '/restaurant/$slug'
+      preLoaderRoute: typeof RestaurantSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chef/$chefId': {
+      id: '/chef/$chefId'
+      path: '/chef/$chefId'
+      fullPath: '/chef/$chefId'
+      preLoaderRoute: typeof ChefChefIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/ops': {
+      id: '/_authenticated/ops'
+      path: '/ops'
+      fullPath: '/ops'
+      preLoaderRoute: typeof AuthenticatedOpsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/me': {
+      id: '/_authenticated/me'
+      path: '/me'
+      fullPath: '/me'
+      preLoaderRoute: typeof AuthenticatedMeRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
+interface AuthenticatedRouteChildren {
+  AuthenticatedMeRoute: typeof AuthenticatedMeRoute
+  AuthenticatedOpsRoute: typeof AuthenticatedOpsRoute
+}
+
+const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedMeRoute: AuthenticatedMeRoute,
+  AuthenticatedOpsRoute: AuthenticatedOpsRoute,
+}
+
+const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
+  AuthenticatedRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthRoute: AuthRoute,
+  ChefChefIdRoute: ChefChefIdRoute,
+  RestaurantSlugRoute: RestaurantSlugRoute,
+  TableTableIdRoute: TableTableIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

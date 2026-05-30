@@ -1,0 +1,242 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useAuth } from "@/lib/auth";
+import { useEffect, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabaseClient";
+import { getCrewContextForCurrentUser } from "@/lib/crew";
+
+export const Route = createFileRoute("/_authenticated/ops")({
+  component: OpsPage,
+});
+
+function OpsPage() {
+  const { user } = useAuth();
+  const crewQ = useQuery({
+    queryKey: ["crew-ctx", user?.id],
+    enabled: !!user?.id,
+    queryFn: () => getCrewContextForCurrentUser(user!.id),
+  });
+
+  if (crewQ.isLoading) return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
+  if (!crewQ.data || crewQ.data.restaurantIds.length === 0) {
+    return (
+      <main className="mx-auto max-w-3xl px-5 py-8">
+        <h1 className="text-3xl">Ops</h1>
+        <p className="mt-4 rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
+          Not authorized — your account isn't linked to a restaurant crew.
+        </p>
+      </main>
+    );
+  }
+
+  return (
+    <main className="mx-auto max-w-3xl px-5 pb-12">
+      <h1 className="text-3xl">Venue Love Meter</h1>
+      {crewQ.data.restaurantIds.map((rid) => (
+        <RestaurantOps key={rid} restaurantId={rid} chefProfileIds={crewQ.data!.chefProfileIds} />
+      ))}
+    </main>
+  );
+}
+
+function RestaurantOps({ restaurantId, chefProfileIds }: { restaurantId: string; chefProfileIds: string[] }) {
+  const qc = useQueryClient();
+
+  // restaurant meta
+  const meta = useQuery({
+    queryKey: ["ops-meta", restaurantId],
+    queryFn: async () => {
+      const [{ data: r }, { data: dishes }, { data: crew }] = await Promise.all([
+        supabase.from("restaurants").select("id, name").eq("id", restaurantId).maybeSingle(),
+        supabase.from("dishes").select("id, name").eq("restaurant_id", restaurantId),
+        supabase
+          .from("restaurant_crew")
+          .select("chef_profiles:chef_profile_id(id, full_name)")
+          .eq("restaurant_id", restaurantId),
+      ]);
+      const chefs = (crew ?? [])
+        .map((row: any) => row.chef_profiles)
+        .filter(Boolean) as { id: string; full_name: string }[];
+      return {
+        restaurant: r as { id: string; name: string } | null,
+        dishes: (dishes ?? []) as { id: string; name: string }[],
+        chefs,
+      };
+    },
+  });
+
+  // hearts (all for this restaurant's targets)
+  const dishIds = useMemo(() => meta.data?.dishes.map((d) => d.id) ?? [], [meta.data]);
+  const chefIds = useMemo(() => meta.data?.chefs.map((c) => c.id) ?? [], [meta.data]);
+
+  const hearts = useQuery({
+    queryKey: ["ops-hearts", restaurantId, dishIds.join(","), chefIds.join(",")],
+    enabled: meta.isSuccess,
+    queryFn: async () => {
+      const ids = [restaurantId, ...dishIds, ...chefIds];
+      if (ids.length === 0) return [];
+      const { data, error } = await supabase
+        .from("hearts")
+        .select("target_type, target_id")
+        .in("target_id", ids);
+      if (error) throw error;
+      return (data ?? []) as { target_type: string; target_id: string }[];
+    },
+  });
+
+  useEffect(() => {
+    const ch = supabase
+      .channel(`ops-hearts-${restaurantId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "hearts" }, () =>
+        qc.invalidateQueries({ queryKey: ["ops-hearts", restaurantId] }),
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(ch);
+    };
+  }, [restaurantId, qc]);
+
+  const conns = useQuery({
+    queryKey: ["ops-conns", restaurantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("table_connections")
+        .select("id, entry_method, is_verified_presence, created_at, table_id, restaurant_tables:table_id(table_number, restaurant_id)")
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (error) throw error;
+      return (data ?? []).filter((c: any) => c.restaurant_tables?.restaurant_id === restaurantId);
+    },
+  });
+
+  const notes = useQuery({
+    queryKey: ["ops-notes", restaurantId, chefIds.join(",")],
+    enabled: chefIds.length > 0,
+    queryFn: async () => {
+      if (chefIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("thank_you_notes")
+        .select("id, note_content, created_at, target_chef_id")
+        .in("target_chef_id", chefIds)
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  useEffect(() => {
+    const ch = supabase
+      .channel(`ops-feeds-${restaurantId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "table_connections" }, () =>
+        qc.invalidateQueries({ queryKey: ["ops-conns", restaurantId] }),
+      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "thank_you_notes" }, () =>
+        qc.invalidateQueries({ queryKey: ["ops-notes", restaurantId] }),
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(ch);
+    };
+  }, [restaurantId, qc]);
+
+  const heartList = hearts.data ?? [];
+  const total = heartList.length;
+  const perChef = (meta.data?.chefs ?? [])
+    .map((c) => ({ ...c, n: heartList.filter((h) => h.target_type === "chef_profile" && h.target_id === c.id).length }))
+    .sort((a, b) => b.n - a.n);
+  const perDish = (meta.data?.dishes ?? [])
+    .map((d) => ({ ...d, n: heartList.filter((h) => h.target_type === "dish" && h.target_id === d.id).length }))
+    .sort((a, b) => b.n - a.n);
+
+  return (
+    <section className="mt-6">
+      <h2 className="text-xl">{meta.data?.restaurant?.name ?? "Restaurant"}</h2>
+      <div className="mt-3 rounded-lg border border-border bg-card p-5">
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">Hearts received</div>
+        <div className="mt-1 text-5xl text-primary tabular-nums">{total}</div>
+      </div>
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <Panel title="Per chef">
+          {perChef.length === 0 ? (
+            <Empty>No chefs.</Empty>
+          ) : (
+            <ul className="space-y-1.5">
+              {perChef.map((c) => (
+                <li key={c.id} className="flex items-center justify-between text-sm">
+                  <span className="text-card-foreground">{c.full_name}</span>
+                  <span className="text-primary tabular-nums">♥ {c.n}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+        <Panel title="Per dish">
+          {perDish.length === 0 ? (
+            <Empty>No dishes.</Empty>
+          ) : (
+            <ul className="space-y-1.5">
+              {perDish.map((d) => (
+                <li key={d.id} className="flex items-center justify-between text-sm">
+                  <span className="text-card-foreground">{d.name}</span>
+                  <span className="text-primary tabular-nums">♥ {d.n}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      </div>
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <Panel title="Live table connections">
+          {!conns.data?.length ? (
+            <Empty>No connections yet.</Empty>
+          ) : (
+            <ul className="space-y-2">
+              {conns.data.map((c: any) => (
+                <li key={c.id} className="flex items-center justify-between text-xs">
+                  <span className="text-card-foreground">
+                    Table {c.restaurant_tables?.table_number ?? "?"}
+                    {c.is_verified_presence && <span className="ml-1.5 rounded bg-primary/10 px-1.5 py-0.5 text-primary">verified</span>}
+                  </span>
+                  <span className="text-muted-foreground">{c.entry_method} · {new Date(c.created_at).toLocaleTimeString()}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+        <Panel title="Thank-you notes">
+          {!notes.data?.length ? (
+            <Empty>No notes yet.</Empty>
+          ) : (
+            <ul className="space-y-2">
+              {notes.data.map((n: any) => {
+                const chef = meta.data?.chefs.find((c) => c.id === n.target_chef_id);
+                return (
+                  <li key={n.id} className="rounded border border-border p-2 text-xs">
+                    <div className="text-muted-foreground">→ {chef?.full_name ?? "Chef"}</div>
+                    <div className="mt-0.5 text-card-foreground">{n.note_content}</div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Panel>
+      </div>
+    </section>
+  );
+}
+
+function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <div className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="text-xs text-muted-foreground">{children}</p>;
+}
