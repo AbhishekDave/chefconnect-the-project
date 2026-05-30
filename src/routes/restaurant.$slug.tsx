@@ -1,8 +1,8 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { queryOptions, useSuspenseQuery, useQuery } from "@tanstack/react-query";
+import { queryOptions, useSuspenseQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
 import { useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { HeartButton } from "@/components/HeartButton";
 
 type Restaurant = {
   id: string;
@@ -25,7 +25,7 @@ const restaurantQuery = (slug: string) =>
       if (!r) throw notFound();
 
       const [{ data: dishes }, { data: crew }] = await Promise.all([
-        supabase.from("dishes").select("id, name").eq("restaurant_id", r.id).order("name"),
+        supabase.from("signature_dishes").select("id, dish_name").eq("restaurant_id", r.id).eq("is_active", true).order("dish_name"),
         supabase
           .from("restaurant_crew")
           .select("crew_role, chef_profiles:chef_profile_id(id, full_name)")
@@ -41,7 +41,7 @@ const restaurantQuery = (slug: string) =>
         .filter((c) => c.id)
         .sort((a, b) => (a.crew_role === "Head Chef" ? -1 : b.crew_role === "Head Chef" ? 1 : 0));
 
-      return { restaurant: r as Restaurant, dishes: (dishes ?? []) as { id: string; name: string }[], chefs };
+      return { restaurant: r as Restaurant, dishes: (dishes ?? []) as { id: string; dish_name: string }[], chefs };
     },
   });
 
@@ -94,13 +94,17 @@ function RestaurantPage() {
   const { slug } = Route.useParams();
   const { data } = useSuspenseQuery(restaurantQuery(slug));
   const { restaurant, dishes, chefs } = data;
+  const restaurantHearts = useLiveHeartCount("restaurant", restaurant.id);
 
   return (
     <main className="mx-auto max-w-2xl px-5 py-8">
       <Link to="/" className="text-xs text-muted-foreground hover:text-foreground">← Home</Link>
       <h1 className="mt-3 text-4xl">{restaurant.name}</h1>
       {restaurant.description && <p className="mt-2 text-sm text-muted-foreground">{restaurant.description}</p>}
-      <div className="mt-2"><HeartBadge targetType="restaurant" targetId={restaurant.id} /></div>
+      <div className="mt-4 max-w-xs">
+        <HeartButton count={restaurantHearts} label="Love Meter" />
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">Hearts come from diners at the table.</p>
 
       <section className="mt-8">
         <h2 className="mb-3 text-2xl">Kitchen crew</h2>
@@ -135,7 +139,7 @@ function RestaurantPage() {
           <ul className="space-y-2">
             {dishes.map((d) => (
               <li key={d.id} className="flex items-center justify-between rounded-lg border border-border bg-card p-4">
-                <span className="text-card-foreground">{d.name}</span>
+                <span className="text-card-foreground">{d.dish_name}</span>
                 <HeartBadge targetType="dish" targetId={d.id} />
               </li>
             ))}
