@@ -214,49 +214,6 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">{children}</p>;
 }
 
-function ProofUploader({ tableId, restaurantId, foodieProfileId }: { tableId: string; restaurantId: string; foodieProfileId: string | null }) {
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
-
-  async function onFile(file: File | null) {
-    if (!file) return;
-    setBusy(true);
-    try {
-      const token = getOrCreateAnonymousSessionToken();
-      const image_url = await uploadProofImage(token, file);
-      const { error } = await supabase.from("meal_visit_proofs").insert({
-        restaurant_id: restaurantId,
-        table_id: tableId,
-        anonymous_session_token: token,
-        image_url,
-        foodie_profile_id: foodieProfileId,
-      });
-      if (error) throw error;
-      setDone(true);
-      toast.success("Proof saved.");
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (done) return <Empty>Thanks — your proof is in.</Empty>;
-
-  return (
-    <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-border bg-card p-6 text-sm text-muted-foreground hover:border-primary">
-      <input
-        type="file"
-        accept="image/*"
-        capture="environment"
-        hidden
-        disabled={busy}
-        onChange={(e) => onFile(e.target.files?.[0] ?? null)}
-      />
-      {busy ? "Uploading…" : "Snap or upload a photo"}
-    </label>
-  );
-}
 
 function ThankYouForm({ chefs, foodieProfileId }: { chefs: Chef[]; foodieProfileId: string | null }) {
   const [chefId, setChefId] = useState<string>("");
