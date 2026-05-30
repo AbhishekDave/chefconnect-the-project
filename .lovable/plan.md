@@ -1,173 +1,63 @@
-# Cheftoman PWA — Build Plan (v3.4, final)
+# Plan v4 (final) — Table-name fixes + ChefConnect UI adoption
 
-Mobile-first PWA. **Strictly client-side Supabase** via `@supabase/supabase-js` with the publishable anon key, `persistSession: true`, `autoRefreshToken: true`. No server functions, no edge functions.
+## Part A — Table-name audit fixes
 
-## Locked conventions
+I audited every `supabase.from(...)` call. No `chefs` or `tables` misuses. Three `dishes` references need correction (table name + column name):
 
-- **Column `anon_token` is banned** on `hearts`, `table_connections`, `meal_visit_proofs`, `thank_you_notes` — they all use `anonymous_session_token`.
-- **Exception:** the RPC `stitch_anonymous_session` is called with key `anon_token` (matches its SQL parameter name).
-- Storage bucket: **`cheftoman`** (public), already policied.
-- **No hardcoded placeholder content.** Every name, count, dish, chef, note, metric renders from Supabase with explicit loading/empty/error states.
-- **No backend SQL or storage policies from me** — RLS, grants, storage policies, and Realtime are already applied on your side.
-- **`users.full_name` stays NOT NULL.** Sign-up always carries a name through to the row — the first `users` insert would otherwise fail.
-- **Vocabulary:** the aggregate heart total is the **"Love Meter"** (diner side: *hearts given*; venue side: *hearts received*). **Thank-you notes** keep that name. No "points", "karma", or "badge" language anywhere in UI copy.
+| File:line | Current | Fix |
+|---|---|---|
+| `src/routes/table.$tableId.tsx:44` | `.from("dishes").select("id, name")` | `.from("signature_dishes").select("id, dish_name").eq("is_active", true)` |
+| `src/routes/restaurant.$slug.tsx:28` | `.from("dishes").select("id, name")` | `.from("signature_dishes").select("id, dish_name").eq("is_active", true).order("dish_name")` |
+| `src/routes/_authenticated/ops.tsx:51` | `.from("dishes").select("id, name")` | `.from("signature_dishes").select("id, dish_name, hearts_count").eq("is_active", true)` |
 
-## 1. Foundations
+JSX reading `d.name` updated to `d.dish_name`. The Venue Love Meter per-dish breakdown uses `signature_dishes.hearts_count` directly (matches schema, no re-count).
 
-- `src/lib/supabaseClient.ts` — `createClient(VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } })`.
-- `src/lib/anonymousSession.ts` — `getOrCreateAnonymousSessionToken()` returns uuid v4 in LocalStorage key `cheftoman.anonymous_session_token`. Never auto-cleared.
-- `src/lib/auth.tsx` — React context over `supabase.auth.getSession` + `onAuthStateChange`. Owns the **idempotent post-auth reconcile** (see §4).
-- `src/lib/storage.ts` — `supabase.storage.from('cheftoman').upload(...)` + `getPublicUrl(...)`.
-- `src/lib/crew.ts` — `getCrewContextForCurrentUser()` (see §6).
-- `src/lib/chefTier.ts` — client-side tier label from `total_hearts` (no DB column).
-- Tailwind tokens in `src/styles.css`: charcoal + ember + cream, Instrument Serif headings + Inter body, mobile-first container, safe-area padding.
-- PWA: `public/manifest.webmanifest` + 192/512 icons + theme-color + `<link rel="manifest">` in `__root.tsx`. No service worker.
+All other names already correct: `users`, `chef_profiles`, `foodie_profiles`, `restaurants`, `restaurant_tables`, `restaurant_crew`, `hearts`, `table_connections`, `meal_visit_proofs`, `thank_you_notes`. Crew lookup in `src/lib/crew.ts` already goes `user_id → chef_profiles.id → restaurant_crew.chef_profile_id`.
 
-## 2. Routes (file-based, `src/routes/`)
+No SQL output. No schema changes.
 
-```
-__root.tsx              shell + AuthProvider + QueryClientProvider + manifest
-index.tsx               landing
-auth.tsx                email/password sign in + sign up (with name)
-table.$tableId.tsx      anonymous diner (reads ?src=)
-restaurant.$slug.tsx    public restaurant (slug confirmed)
-chef.$chefId.tsx        public chef profile
-_authenticated.tsx      gate
-_authenticated/me.tsx   foodie profile + diner Love Meter
-_authenticated/ops.tsx  ops panel (crew-only) + venue Love Meter
-```
+## Part B — ChefConnect Hub UI adoption (visual polish, data wiring untouched)
 
-## 3. Anonymous diner — `/table/$tableId?src=nfc|qr|link`
+Cherry-pick from `project:4a67d4f0`. All copy stays Love Meter / thank-you notes (no points/karma/badge). All colors via semantic tokens in `src/styles.css`.
 
-- `validateSearch` (zod): `src ∈ {'nfc','qr','link'}`, default `'link'`.
-- Resolve table → restaurant, table number, chefs on duty, dishes.
-- Insert `table_connections`: `table_id`, `anonymous_session_token`, `entry_method = src`, `is_verified_presence = (src === 'nfc')`. No geolocation.
-- Heart tap → insert `hearts` with `target_type`, `target_id`, `anonymous_session_token`. Optimistic. Realtime updates counters.
-- **"Prove you ate here"** — upload to `cheftoman` at `proofs/{anonymous_session_token}/{uuid}.{ext}`, then insert `meal_visit_proofs`:
-  - `restaurant_id` (required, NOT NULL — derived from the table's restaurant)
-  - `table_id`
-  - `anonymous_session_token`
-  - `image_url`
-  - `foodie_profile_id` = null when anonymous; current user's foodie_profile_id when signed in
-- **Thank-you note** — real insert into `thank_you_notes`: `target_chef_id`, `note_content` (1–500), `anonymous_session_token`. Empty state when none. Diner copy: **"Goes straight to {chef name}'s kitchen team."**
-- **Signup nudge** by `cheftoman.nudge_count` (LocalStorage, never reset): 1st → chip, 2nd → card, 3rd+ → sticky banner to `/auth`. **Copy:** *"Claim your profile — your {n} hearts come with you."* (n = current count of `hearts` rows for this anonymous_session_token; never reset, never re-counted to zero).
+| ChefConnect file | Cheftoman target | Notes |
+|---|---|---|
+| `HeartButton.tsx` | `src/components/HeartButton.tsx` (new) | Adopt tap animation + count chip. **Supports two modes:** interactive (table session) and display-only (public pages). |
+| `VisitProofForm.tsx` | `src/components/VisitProofForm.tsx` (new) → replaces inline markup in `table.$tableId.tsx` | Keep `cheftoman` bucket upload + `meal_visit_proofs` insert. |
+| `Navbar.tsx` + `NavLink.tsx` | `src/components/Navbar.tsx` (new) → mounted in `__root.tsx` | TanStack `<Link>`. Links: `/`, `/me`, `/ops`, `/auth`. |
+| `MobileBottomNav.tsx` | `src/components/MobileBottomNav.tsx` (new) → mounted in `__root.tsx` (hidden ≥md) | TanStack `<Link>` swap. |
+| ~~`ChefmojiReactions.tsx`~~ | **Skip** | Chefmoji tables locked (Phase 6). |
+| ~~`ScannerFab.tsx`~~ | **Skip** | NFC tap / native QR scan opens `/table/$tableId` directly. No in-app scanner. |
+| `BadgeCard`, `BadgeShowcase`, `BadgeUnlockModal` | **Skip** | No badge vocabulary. |
+| `FollowButton`, `TagVoting`, `DishManager`, `PushNotificationSetup` | **Skip** | Out of v3.4 MVP. |
+| `ui/*` (shadcn) | **Skip** | Already present. |
 
-## 4. Auth + idempotent post-auth reconcile
+### HeartButton — interactive vs display-only (locked constraint)
 
-`/auth` has email + password tabs. **Sign-up form fields (all required):** `full_name`, `email`, `password`.
+`HeartButton` accepts an `interactive` boolean prop. Hearting is **enabled only on `/table/$tableId`** inside an active table session (verified-present diner). Public pages render the heart as display-only:
 
-```ts
-supabase.auth.signUp({
-  email,
-  password,
-  options: { data: { full_name } }    // lands in user.user_metadata.full_name
-})
-```
+- `src/routes/table.$tableId.tsx` → `<HeartButton interactive count={...} onHeart={insert} />` — tap inserts, Realtime updates.
+- `src/routes/chef.$chefId.tsx` → `<HeartButton count={totalHearts} />` (no `interactive`, no `onHeart`) — count chip only, no tap handler, no insert path wired. Cursor stays default, no hover/press states beyond a static badge.
+- `src/routes/restaurant.$slug.tsx` → same display-only treatment for chef and dish cards.
 
-The signup callback only fires `signUp` and shows status. **No DB writes happen synchronously there.**
+Rationale (encoded in component): a heart must come from a verified-present diner; public pages never write to `hearts`. The button visually renders the same shape so the brand stays consistent, but the public variant is a `<div>` (not `<button>`) with no click handler and no aria-pressed.
 
-All identity reconciliation lives in **one place** inside `AuthProvider`: a listener on `supabase.auth.onAuthStateChange((_event, session) => …)` that runs `reconcileIdentity(session.user)` whenever there is a valid session (signup, sign-in, token refresh, page reload). Every step is idempotent and **safe to fire on every login/reload**:
+### Adaptation rules (every copied component)
 
-```text
-reconcileIdentity(user):
-  1. users upsert (onConflict: 'id'):
-       full_name = user.user_metadata?.full_name ?? <existing> ?? user.email
-       { id: user.id, email: user.email, full_name, user_type: 'foodie' }
-     - No password_hash.
-     - full_name is ALWAYS non-null (users.full_name is NOT NULL).
-     - Read the existing row first; only upsert full_name when the incoming
-       metadata value is non-empty AND existing is null, OR when there is
-       no existing row. Email fallback exists only to satisfy NOT NULL on
-       a brand-new row that somehow lacks metadata.
+1. `react-router-dom` → `@tanstack/react-router`.
+2. Replace literal colors (`bg-orange-500`, hex) with tokens (`bg-primary`, `text-primary-foreground`, `bg-card`, `text-muted-foreground`, …).
+3. Strip "points", "karma", "level", "badge", "unlock", "achievement" copy.
+4. No hardcoded names/counts/dishes; all bound to existing Supabase data. Loading / empty / error states preserved.
+5. No new dependencies unless strictly required (will flag before installing).
 
-  2. foodie_profiles ensure-one:
-       SELECT id FROM foodie_profiles WHERE user_id = user.id LIMIT 1
-       if none → INSERT { user_id: user.id, ... } RETURNING id
-     - Single row per user_id. Cache foodie_profile_id in context + LocalStorage.
+## Order of work
 
-  3. Stitch anon session if a token exists:
-       token = localStorage['cheftoman.anonymous_session_token']
-       if token:
-         supabase.rpc('stitch_anonymous_session', {
-           target_user_id: user.id,
-           target_foodie_profile_id: foodie_profile_id,
-           anon_token: token            // matches SQL param name
-         })
-     - Token stays in LocalStorage; RPC is itself idempotent.
-     - Counts never reset.
+1. Fix the three `dishes` → `signature_dishes` (and `name` → `dish_name`) call sites + JSX.
+2. Create `HeartButton`, `VisitProofForm`, `Navbar`, `MobileBottomNav` (adapted).
+3. Wire `Navbar` + `MobileBottomNav` into `__root.tsx`. Swap interactive `HeartButton` + `VisitProofForm` into `table.$tableId.tsx`. Swap display-only `HeartButton` into `chef.$chefId.tsx` and `restaurant.$slug.tsx`.
+4. Type-check clean, refresh preview, verify: landing renders from DB, table flow hearts insert + Realtime, public-page hearts are non-tappable, Love Meters live-update.
 
-  4. Mark reconciled for this session (in-memory flag keyed by user.id).
-```
+## Out of scope (next pass)
 
-Run sequentially, swallow expected "already exists" cases, surface real errors via toast. Navigate to `/me` after step 2 resolves on a fresh signup; on a normal reload, stay on the current route.
-
-## 5. Public reads
-
-- `/restaurant/$slug` — restaurant, dishes, crew (Head Chef pinned via `crew_role = 'Head Chef'`), live heart counters. Per-section empty states.
-- `/chef/$chefId` — photo, **total hearts**, recent public thank-you notes. **No `tier_level` badge** (column doesn't exist); derived tier label from `total_hearts` via `chefTier.ts`. Empty state when no notes.
-
-## 6. Crew resolution (ops gate)
-
-`restaurant_crew` has **no `user_id`**. Resolve via `chef_profiles`:
-
-```text
-auth.uid()
-  → chef_profiles WHERE user_id = auth.uid()        → chef_profile_id(s)
-  → restaurant_crew WHERE chef_profile_id IN (...)  → restaurant_id(s) + crew_role(s)
-```
-
-Mirrors `is_crew_of()`. Empty result → "Not authorized" empty state on `/ops`.
-
-## 7. Authenticated — `/me` (diner)
-
-Header: **Diner Love Meter** — two live counters from DB, no schema change:
-
-- **Hearts given** — `count(*) from hearts where from_user_id = auth.uid()`
-- **Thank-you notes written** — `count(*) from thank_you_notes where from_foodie_id = <my foodie_profile_id>`
-
-Both subscribe via Realtime (filter on the same columns) and re-count on insert/delete. Zero-state shows the count `0` plus a one-line empty caption — never hidden.
-
-Below the meter, three tabs with **different attribution columns**:
-
-- **Hearts**: `hearts` WHERE `from_user_id = auth.uid()`
-- **Proofs**: `meal_visit_proofs` WHERE `foodie_profile_id = <my foodie_profile_id>`
-- **Notes**: `thank_you_notes` WHERE `from_foodie_id = <my foodie_profile_id>`
-- Per-tab empty states.
-
-## 8. Authenticated — `/ops` (crew-only via §6)
-
-Header: **Venue Love Meter** — a consolidated restaurant heart total, computed live:
-
-```text
-restaurant_total =
-    count(hearts) where target_type='chef_profile' AND target_id IN <restaurant's chef_profile_ids>
-  + count(hearts) where target_type='dish'         AND target_id IN <restaurant's dish_ids>
-  + count(hearts) where target_type='restaurant'   AND target_id = <restaurant_id>
-```
-
-Beneath the total, two breakdowns rendered as lists with live counts:
-
-- **Per chef** — for each `chef_profile` on the restaurant's crew: count of `hearts` where `target_type='chef_profile' AND target_id = chef.id`, sorted desc.
-- **Per dish** — for each dish on the restaurant: count of `hearts` where `target_type='dish' AND target_id = dish.id`, sorted desc.
-
-Alongside the Love Meter, the existing live feeds (unchanged):
-
-- **Live `table_connections` feed** (Realtime) for the crew's restaurant(s) with `entry_method` + `is_verified_presence` badges.
-- **Live `thank_you_notes` feed** (Realtime) grouped by chef. Real rows only.
-- Recent proofs from DB.
-
-All counts/feeds via Realtime on `hearts`, `table_connections`, `thank_you_notes` → invalidate query keys; ops never shows hardcoded numbers.
-
-## 9. Data layer
-
-- TanStack Query throughout.
-- Realtime via `supabase.channel(...).on('postgres_changes', ...)` on `hearts`, `table_connections`, `thank_you_notes` → invalidate query keys.
-- All writes are direct client calls relying on existing RLS. Every anonymous insert sends `anonymous_session_token`.
-
-## 10. Out of scope (v1)
-
-Service worker / offline, push notifications, payments/tipping, geolocation verification, public moderation UI, "intercepted" framing, "points"/"karma"/"badge" language, hardcoded placeholder content.
-
----
-
-Approve to start building. I'll scaffold foundations + routes in parallel, no SQL output from my side.
+- Dish-to-cook recognition routing.
+- Read-only portfolio polish.

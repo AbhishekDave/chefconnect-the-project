@@ -2,6 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
 import { chefTierLabel } from "@/lib/chefTier";
+import { HeartButton } from "@/components/HeartButton";
 
 type ChefProfile = { id: string; full_name: string; bio: string | null; photo_url: string | null };
 
@@ -65,11 +66,13 @@ function ChefPage() {
         )}
         <div>
           <h1 className="text-3xl">{chef.full_name}</h1>
-          <div className="mt-1 text-sm text-muted-foreground">
-            {chefTierLabel(totalHearts)} · <span className="text-primary tabular-nums">♥ {totalHearts}</span>
-          </div>
+          <div className="mt-1 text-sm text-muted-foreground">{chefTierLabel(totalHearts)}</div>
         </div>
       </div>
+      <div className="mt-4 max-w-xs">
+        <HeartButton count={totalHearts} label="Love Meter" />
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">Hearts come from diners at the table.</p>
       {chef.bio && <p className="mt-4 text-sm text-muted-foreground">{chef.bio}</p>}
 
       <section className="mt-8">

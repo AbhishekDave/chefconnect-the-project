@@ -48,7 +48,7 @@ function RestaurantOps({ restaurantId, chefProfileIds }: { restaurantId: string;
     queryFn: async () => {
       const [{ data: r }, { data: dishes }, { data: crew }] = await Promise.all([
         supabase.from("restaurants").select("id, name").eq("id", restaurantId).maybeSingle(),
-        supabase.from("dishes").select("id, name").eq("restaurant_id", restaurantId),
+        supabase.from("signature_dishes").select("id, dish_name, hearts_count").eq("restaurant_id", restaurantId).eq("is_active", true),
         supabase
           .from("restaurant_crew")
           .select("chef_profiles:chef_profile_id(id, full_name)")
@@ -59,7 +59,7 @@ function RestaurantOps({ restaurantId, chefProfileIds }: { restaurantId: string;
         .filter(Boolean) as { id: string; full_name: string }[];
       return {
         restaurant: r as { id: string; name: string } | null,
-        dishes: (dishes ?? []) as { id: string; name: string }[],
+        dishes: (dishes ?? []) as { id: string; dish_name: string; hearts_count: number | null }[],
         chefs,
       };
     },
@@ -179,7 +179,7 @@ function RestaurantOps({ restaurantId, chefProfileIds }: { restaurantId: string;
             <ul className="space-y-1.5">
               {perDish.map((d) => (
                 <li key={d.id} className="flex items-center justify-between text-sm">
-                  <span className="text-card-foreground">{d.name}</span>
+                  <span className="text-card-foreground">{d.dish_name}</span>
                   <span className="text-primary tabular-nums">♥ {d.n}</span>
                 </li>
               ))}
