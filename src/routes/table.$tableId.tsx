@@ -6,7 +6,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
 import { getOrCreateAnonymousSessionToken, bumpNudgeCount, getNudgeCount } from "@/lib/anonymousSession";
 import { useAuth } from "@/lib/auth";
-import { uploadProofImage } from "@/lib/storage";
+import { HeartButton as UIHeartButton } from "@/components/HeartButton";
+import { VisitProofForm } from "@/components/VisitProofForm";
 import { toast } from "sonner";
 
 const SearchSchema = z.object({
@@ -22,7 +23,7 @@ export const Route = createFileRoute("/table/$tableId")({
   ),
 });
 
-type Dish = { id: string; name: string };
+type Dish = { id: string; dish_name: string };
 type Chef = { id: string; full_name: string };
 type TableInfo = {
   id: string;
@@ -41,7 +42,7 @@ async function fetchTableContext(tableId: string) {
   const restaurant = (t as any).restaurants as { id: string; name: string; slug: string };
 
   const [{ data: dishes }, { data: crew }] = await Promise.all([
-    supabase.from("dishes").select("id, name").eq("restaurant_id", restaurant.id).limit(20),
+    supabase.from("signature_dishes").select("id, dish_name").eq("restaurant_id", restaurant.id).eq("is_active", true).limit(20),
     supabase
       .from("restaurant_crew")
       .select("chef_profile_id, crew_role, chef_profiles:chef_profile_id(id, full_name)")
@@ -69,7 +70,7 @@ async function fetchHeartCount(targetType: string, targetId: string): Promise<nu
   return count ?? 0;
 }
 
-function HeartButton({ targetType, targetId, label }: { targetType: string; targetId: string; label: string }) {
+function HeartRow({ targetType, targetId, label }: { targetType: string; targetId: string; label: string }) {
   const qc = useQueryClient();
   const { user } = useAuth();
   const key = ["hearts-count", targetType, targetId];
@@ -109,18 +110,7 @@ function HeartButton({ targetType, targetId, label }: { targetType: string; targ
     qc.invalidateQueries({ queryKey: key });
   }
 
-  return (
-    <button
-      onClick={tap}
-      className="flex w-full items-center justify-between rounded-lg border border-border bg-card p-4 text-left hover:border-primary"
-    >
-      <span className="text-card-foreground">{label}</span>
-      <span className="flex items-center gap-1.5 text-primary">
-        <span aria-hidden>♥</span>
-        <span className="tabular-nums text-sm">{count}</span>
-      </span>
-    </button>
-  );
+  return <UIHeartButton interactive count={count} label={label} onHeart={tap} />;
 }
 
 function TablePage() {
@@ -177,7 +167,7 @@ function TablePage() {
           <ul className="space-y-2">
             {chefs.map((c) => (
               <li key={c.id}>
-                <HeartButton targetType="chef_profile" targetId={c.id} label={c.full_name} />
+                <HeartRow targetType="chef_profile" targetId={c.id} label={c.full_name} />
               </li>
             ))}
           </ul>
@@ -191,7 +181,7 @@ function TablePage() {
           <ul className="space-y-2">
             {dishes.map((d) => (
               <li key={d.id}>
-                <HeartButton targetType="dish" targetId={d.id} label={d.name} />
+                <HeartRow targetType="dish" targetId={d.id} label={d.dish_name} />
               </li>
             ))}
           </ul>
@@ -199,7 +189,7 @@ function TablePage() {
       </Section>
 
       <Section title="Prove you ate here">
-        <ProofUploader tableId={tableId} restaurantId={table.restaurant.id} foodieProfileId={foodieProfileId} />
+        <VisitProofForm tableId={tableId} restaurantId={table.restaurant.id} foodieProfileId={foodieProfileId} />
       </Section>
 
       <Section title="Write a thank-you note">
