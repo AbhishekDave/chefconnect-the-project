@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 type BaseProps = {
-  count: number;
+  count: number | null;
   label?: string;
   className?: string;
 };
@@ -20,17 +20,24 @@ type DisplayProps = BaseProps & {
 export type HeartButtonProps = InteractiveProps | DisplayProps;
 
 /**
- * Hearts come only from verified-present diners at a table.
- * Public pages render a display-only chip; the table page renders an interactive button.
- * When `hearted` is true, the button reflects an existing heart from this diner
- * (tap again to un-heart). Server-side uniqueness is a Phase 2 DB constraint:
- *   unique(target_type, target_id, coalesce(from_user_id::text, anonymous_session_token)).
+ * Hearts are give-once and permanent per diner per target.
+ * - `count`: global total (row count). `null` renders an em-dash placeholder so we
+ *   never show a misleading "0" while loading.
+ * - `hearted`: this diner already gave a heart → button is filled and locked
+ *   (non-interactive, no hover affordance). Tapping is a no-op.
  */
 export function HeartButton(props: HeartButtonProps) {
   const { count, label, className = "" } = props;
   const interactive = props.interactive === true;
   const hearted = interactive && (props as InteractiveProps).hearted === true;
   const [pulse, setPulse] = useState(false);
+
+  const countNode =
+    count === null ? (
+      <span className="tabular-nums text-sm text-muted-foreground">—</span>
+    ) : (
+      <span className="tabular-nums text-sm">{count}</span>
+    );
 
   const inner = (
     <>
@@ -42,7 +49,7 @@ export function HeartButton(props: HeartButtonProps) {
         >
           {hearted ? "♥" : "♡"}
         </span>
-        <span className="tabular-nums text-sm">{count}</span>
+        {countNode}
       </span>
     </>
   );
@@ -54,7 +61,7 @@ export function HeartButton(props: HeartButtonProps) {
     return (
       <div
         className={`${shell} border-border ${className}`}
-        aria-label={label ? `${label}, ${count} hearts` : `${count} hearts`}
+        aria-label={label ? `${label}, ${count ?? 0} hearts` : `${count ?? 0} hearts`}
       >
         {inner}
       </div>
@@ -62,19 +69,29 @@ export function HeartButton(props: HeartButtonProps) {
   }
 
   const { onHeart, disabled } = props;
+  const locked = hearted || disabled;
   return (
     <button
       type="button"
       onClick={async () => {
+        if (locked) return;
         setPulse(true);
         setTimeout(() => setPulse(false), 220);
         await onHeart();
       }}
-      disabled={disabled}
-      aria-pressed={hearted}
-      aria-label={label ? `${hearted ? "Remove heart from" : "Send a heart to"} ${label}` : "Send a heart"}
-      className={`${shell} transition-colors active:scale-[0.99] disabled:opacity-50 ${
-        hearted ? "border-primary bg-primary/5" : "border-border hover:border-primary"
+      disabled={locked}
+      aria-disabled={locked}
+      aria-label={
+        label
+          ? hearted
+            ? `You hearted ${label}`
+            : `Send a heart to ${label}`
+          : "Send a heart"
+      }
+      className={`${shell} transition-colors ${
+        hearted
+          ? "cursor-default border-primary bg-primary/10"
+          : "border-border hover:border-primary active:scale-[0.99] disabled:opacity-50"
       } ${className}`}
     >
       {inner}
