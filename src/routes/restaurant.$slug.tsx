@@ -47,9 +47,25 @@ const restaurantQuery = (slug: string) =>
   });
 
 export const Route = createFileRoute("/restaurant/$slug")({
-  head: ({ params }) => ({
-    meta: [{ title: `${params.slug} — Cheftoman` }],
-  }),
+  head: ({ params, loaderData }) => {
+    const d = loaderData as { restaurant?: Restaurant } | undefined;
+    const name = d?.restaurant?.name ?? params.slug;
+    const title = `${name} — Cheftoman`;
+    const description =
+      d?.restaurant?.description?.slice(0, 155) ??
+      `${name} on Cheftoman — recognition for the kitchen team from diners at the table.`;
+    return {
+      meta: [
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        { property: "og:type", content: "website" },
+        { property: "og:url", content: `/restaurant/${params.slug}` },
+      ],
+      links: [{ rel: "canonical", href: `/restaurant/${params.slug}` }],
+    };
+  },
   loader: ({ context, params }) => context.queryClient.ensureQueryData(restaurantQuery(params.slug)),
   component: RestaurantPage,
   errorComponent: ({ error }) => <div className="p-6 text-sm text-destructive">{error.message}</div>,
