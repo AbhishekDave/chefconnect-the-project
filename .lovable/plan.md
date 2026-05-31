@@ -1,63 +1,61 @@
-# Plan v4 (final) — Table-name fixes + ChefConnect UI adoption
+# Marketing Landing Page — `/` (index)
 
-## Part A — Table-name audit fixes
+Replace the current restaurant-list `/` with a static, mobile-first marketing page aimed at restaurant owners. Diner flow (`/table/$tableId`) is untouched and never lands here. No Supabase calls, no auth, no backend.
 
-I audited every `supabase.from(...)` call. No `chefs` or `tables` misuses. Three `dishes` references need correction (table name + column name):
+## Scope
 
-| File:line | Current | Fix |
-|---|---|---|
-| `src/routes/table.$tableId.tsx:44` | `.from("dishes").select("id, name")` | `.from("signature_dishes").select("id, dish_name").eq("is_active", true)` |
-| `src/routes/restaurant.$slug.tsx:28` | `.from("dishes").select("id, name")` | `.from("signature_dishes").select("id, dish_name").eq("is_active", true).order("dish_name")` |
-| `src/routes/_authenticated/ops.tsx:51` | `.from("dishes").select("id, name")` | `.from("signature_dishes").select("id, dish_name, hearts_count").eq("is_active", true)` |
+- Rewrite `src/routes/index.tsx` only.
+- Add 2 small presentational components under `src/components/marketing/`.
+- Reuse existing brand tokens in `src/styles.css` (charcoal + ember + cream, Instrument Serif headings, Inter body). No new tokens, no new deps.
+- No changes to `__root.tsx`, navbar, or any other route. (Navbar already hides on public marketing context per existing layout; if it shows, we'll let it — out of scope to retheme nav.)
 
-JSX reading `d.name` updated to `d.dish_name`. The Venue Love Meter per-dish breakdown uses `signature_dishes.hearts_count` directly (matches schema, no re-count).
+## Open items needing user input before implementation
 
-All other names already correct: `users`, `chef_profiles`, `foodie_profiles`, `restaurants`, `restaurant_tables`, `restaurant_crew`, `hearts`, `table_connections`, `meal_visit_proofs`, `thank_you_notes`. Crew lookup in `src/lib/crew.ts` already goes `user_id → chef_profiles.id → restaurant_crew.chef_profile_id`.
+1. **WhatsApp number** for `wa.me/<NUMBER>` links and the sticky button. Need the full international number (no `+`, no spaces).
+2. **Sample-stand fallback email** — when the lead form "sends an email", which address? (Or should the lead form ALSO just open WhatsApp prefilled, and we skip mailto entirely?)
+3. **City** field — free text, or a small preset list?
 
-No SQL output. No schema changes.
+I'll proceed assuming: WhatsApp number = placeholder `__WA_NUMBER__` (easy to swap), lead form opens WhatsApp prefilled (no mailto), city is free text. Tell me if any of that should change.
 
-## Part B — ChefConnect Hub UI adoption (visual polish, data wiring untouched)
+## Page structure (in order)
 
-Cherry-pick from `project:4a67d4f0`. All copy stays Love Meter / thank-you notes (no points/karma/badge). All colors via semantic tokens in `src/styles.css`.
+1. **Hero** — H1 + subhead + primary WhatsApp CTA + secondary "Request a free sample stand" (scrolls to lead form). Charcoal bg, ember accent, cream type.
+2. **What we solve** — 4 cards (grid: 1 col mobile, 2 cols sm, 4 cols lg). Pain points in diner→kitchen recognition gap.
+3. **How it works** — 3 numbered steps (tap NFC / send heart + note / kitchen sees it live).
+4. **Presence-verified difference** — explainer block: why hearts come from real seated diners (NFC + QR at the table), not from anonymous internet reviews. No mention of blocking Google reviews.
+5. **For your kitchen** — benefit list aimed at chefs/owners (morale, retention, signature-dish signal).
+6. **Free pilot offer** — what's included, zero cost, no lock-in. Primary CTA: WhatsApp. Secondary: lead form anchor.
+7. **Lead form** — minimal: name, restaurant, city, WhatsApp number. Submit builds a `wa.me/<NUMBER>?text=...` URL with the four fields prefilled and opens it in a new tab. Pure client-side, no fetch.
+8. **Final CTA** — single big WhatsApp button + one-line reassurance.
+9. **Footer** — minimal: brand, year, link to `/auth` for existing owners.
 
-| ChefConnect file | Cheftoman target | Notes |
-|---|---|---|
-| `HeartButton.tsx` | `src/components/HeartButton.tsx` (new) | Adopt tap animation + count chip. **Supports two modes:** interactive (table session) and display-only (public pages). |
-| `VisitProofForm.tsx` | `src/components/VisitProofForm.tsx` (new) → replaces inline markup in `table.$tableId.tsx` | Keep `cheftoman` bucket upload + `meal_visit_proofs` insert. |
-| `Navbar.tsx` + `NavLink.tsx` | `src/components/Navbar.tsx` (new) → mounted in `__root.tsx` | TanStack `<Link>`. Links: `/`, `/me`, `/ops`, `/auth`. |
-| `MobileBottomNav.tsx` | `src/components/MobileBottomNav.tsx` (new) → mounted in `__root.tsx` (hidden ≥md) | TanStack `<Link>` swap. |
-| ~~`ChefmojiReactions.tsx`~~ | **Skip** | Chefmoji tables locked (Phase 6). |
-| ~~`ScannerFab.tsx`~~ | **Skip** | NFC tap / native QR scan opens `/table/$tableId` directly. No in-app scanner. |
-| `BadgeCard`, `BadgeShowcase`, `BadgeUnlockModal` | **Skip** | No badge vocabulary. |
-| `FollowButton`, `TagVoting`, `DishManager`, `PushNotificationSetup` | **Skip** | Out of v3.4 MVP. |
-| `ui/*` (shadcn) | **Skip** | Already present. |
+## Always-on UI
 
-### HeartButton — interactive vs display-only (locked constraint)
+- **Sticky WhatsApp FAB** — fixed bottom-right, ember bg, visible on every section, `aria-label="Chat on WhatsApp"`. Hidden on `/table/*` and `/auth` because it only lives inside `index.tsx` (not the root).
+- **Scroll-triggered popup** — appears once after the user scrolls past the "How it works" section (IntersectionObserver on a sentinel below that section). Value-first copy: "Want a free sample stand for your tables?" with WhatsApp CTA + dismiss. Never time-triggered. Dismissal persisted in `sessionStorage` so it doesn't reappear that session.
 
-`HeartButton` accepts an `interactive` boolean prop. Hearting is **enabled only on `/table/$tableId`** inside an active table session (verified-present diner). Public pages render the heart as display-only:
+## Files to add / change
 
-- `src/routes/table.$tableId.tsx` → `<HeartButton interactive count={...} onHeart={insert} />` — tap inserts, Realtime updates.
-- `src/routes/chef.$chefId.tsx` → `<HeartButton count={totalHearts} />` (no `interactive`, no `onHeart`) — count chip only, no tap handler, no insert path wired. Cursor stays default, no hover/press states beyond a static badge.
-- `src/routes/restaurant.$slug.tsx` → same display-only treatment for chef and dish cards.
+- **edit** `src/routes/index.tsx` — replace `Landing` + `RestaurantList` + `featuredQuery` with the marketing page. Keep `head()` SEO with updated title/description for owners.
+- **add** `src/components/marketing/StickyWhatsApp.tsx` — sticky FAB.
+- **add** `src/components/marketing/ScrollPopup.tsx` — IntersectionObserver popup, sessionStorage gated.
+- (Lead form lives inline in `index.tsx` — small enough not to warrant its own file.)
 
-Rationale (encoded in component): a heart must come from a verified-present diner; public pages never write to `hearts`. The button visually renders the same shape so the brand stays consistent, but the public variant is a `<div>` (not `<button>`) with no click handler and no aria-pressed.
+## Technical notes
 
-### Adaptation rules (every copied component)
+- Single shared helper `buildWaUrl(message: string)` defined in `index.tsx` returns `https://wa.me/${NUMBER}?text=${encodeURIComponent(message)}`.
+- All CTAs are `<a href target="_blank" rel="noopener noreferrer">`, not buttons, so they work without JS.
+- Lead form is a controlled `<form onSubmit>` that calls `window.open(buildWaUrl(...))` and `preventDefault`s. No network calls.
+- Uses semantic tokens (`bg-background`, `bg-card`, `text-foreground`, `text-primary`, `bg-primary`, `border-border`, etc.) — no literal hex.
+- One H1 only (in hero). Section headings are H2. SEO `head()` updated: title ≈ "Cheftoman — Real love from real diners, straight to your kitchen", description ≈ 150 chars for restaurant owners.
+- Mobile-first: base styles target ~375px; `sm:` and `lg:` widen the grids.
+- No framer-motion needed; CSS transitions only (keeps bundle small, no new deps).
+- Removes the now-unused `featuredQuery` and the `useSuspenseQuery` import from this file. The `restaurants` table query disappears from `/`; nothing else in the app depends on it.
 
-1. `react-router-dom` → `@tanstack/react-router`.
-2. Replace literal colors (`bg-orange-500`, hex) with tokens (`bg-primary`, `text-primary-foreground`, `bg-card`, `text-muted-foreground`, …).
-3. Strip "points", "karma", "level", "badge", "unlock", "achievement" copy.
-4. No hardcoded names/counts/dishes; all bound to existing Supabase data. Loading / empty / error states preserved.
-5. No new dependencies unless strictly required (will flag before installing).
+## Out of scope (explicitly)
 
-## Order of work
-
-1. Fix the three `dishes` → `signature_dishes` (and `name` → `dish_name`) call sites + JSX.
-2. Create `HeartButton`, `VisitProofForm`, `Navbar`, `MobileBottomNav` (adapted).
-3. Wire `Navbar` + `MobileBottomNav` into `__root.tsx`. Swap interactive `HeartButton` + `VisitProofForm` into `table.$tableId.tsx`. Swap display-only `HeartButton` into `chef.$chefId.tsx` and `restaurant.$slug.tsx`.
-4. Type-check clean, refresh preview, verify: landing renders from DB, table flow hearts insert + Realtime, public-page hearts are non-tappable, Love Meters live-update.
-
-## Out of scope (next pass)
-
-- Dish-to-cook recognition routing.
-- Read-only portfolio polish.
+- Any backend, lead persistence, email sending, or analytics.
+- Navbar/footer restructure across other routes.
+- Changes to `/table/$tableId`, `/restaurant/$slug`, `/chef/$chefId`, `/me`, `/ops`, `/auth`.
+- New brand tokens or font additions (using only what's already in `src/styles.css`).
+- Any "block your Google reviews" framing — copy stays positive ("verified, kitchen-direct appreciation").
