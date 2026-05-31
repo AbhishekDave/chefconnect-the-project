@@ -141,7 +141,7 @@ function HeartRow({
   const countKey = ["hearts-count", targetType, targetId];
   const heartedKey = ["hearted", identity, targetType, targetId];
 
-  const { data: count = 0 } = useQuery({
+  const { data: count } = useQuery({
     queryKey: countKey,
     queryFn: () => countHearts(targetType, targetId),
   });
@@ -163,7 +163,11 @@ function HeartRow({
       return data as { id: string } | null;
     },
   });
-  const hearted = !!myHeart;
+
+  // Optimistic lock: flips true the instant the diner taps, before the insert
+  // resolves. Rolled back to false on insert failure.
+  const [optimisticHearted, setOptimisticHearted] = useState(false);
+  const hearted = !!myHeart || optimisticHearted;
 
   useEffect(() => {
     const ch = supabase
@@ -184,31 +188,25 @@ function HeartRow({
   }, [targetType, targetId, qc, identity]);
 
   async function tap() {
-    // Toggle: if this diner already has a heart row, remove it; else insert.
-    // Client-side dedupe only — DB-level uniqueness is a Phase 2 constraint:
+    // Give-once, permanent. No un-heart. DB-level uniqueness is Phase 2:
     // unique(target_type, target_id, coalesce(from_user_id::text, anonymous_session_token)).
-    if (myHeart) {
-      const { error } = await supabase.from("hearts").delete().eq("id", myHeart.id);
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
-    } else {
-      const token = getOrCreateAnonymousSessionToken();
-      const { error } = await supabase.from("hearts").insert({
-        target_type: targetType,
-        target_id: targetId,
-        anonymous_session_token: token,
-        from_user_id: user?.id ?? null,
-        // Reuse is_gps_verified as presence proof: NFC tap = at the table.
-        is_gps_verified: entryMethod === "nfc",
-      });
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
-      if (!user) bumpNudgeCount();
+    if (hearted) return;
+    setOptimisticHearted(true);
+    const token = getOrCreateAnonymousSessionToken();
+    const { error } = await supabase.from("hearts").insert({
+      target_type: targetType,
+      target_id: targetId,
+      anonymous_session_token: token,
+      from_user_id: user?.id ?? null,
+      // Reuse is_gps_verified as presence proof: NFC tap = at the table.
+      is_gps_verified: entryMethod === "nfc",
+    });
+    if (error) {
+      setOptimisticHearted(false);
+      toast.error(error.message);
+      return;
     }
+    if (!user) bumpNudgeCount();
     qc.invalidateQueries({ queryKey: countKey });
     qc.invalidateQueries({ queryKey: heartedKey });
   }
@@ -216,7 +214,7 @@ function HeartRow({
   return (
     <UIHeartButton
       interactive
-      count={count}
+      count={count ?? null}
       label={label}
       hearted={hearted}
       onHeart={tap}
