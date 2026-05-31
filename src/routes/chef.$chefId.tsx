@@ -3,6 +3,7 @@ import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
 import { chefTierLabel } from "@/lib/chefTier";
 import { HeartButton } from "@/components/HeartButton";
+import { getChefHeartTotal } from "@/lib/hearts";
 
 type ChefProfile = { id: string; full_name: string; bio: string | null; photo_url: string | null };
 
@@ -18,12 +19,26 @@ const chefQuery = (chefId: string) =>
       if (error) throw error;
       if (!chef) throw notFound();
 
-      const [{ count: heartsCount }, { data: notes }] = await Promise.all([
-        supabase
-          .from("hearts")
-          .select("*", { count: "exact", head: true })
-          .eq("target_type", "chef_profile")
-          .eq("target_id", chefId),
+      // crew rows + assigned signature dishes for this chef
+      const { data: crewRows } = await supabase
+        .from("restaurant_crew")
+        .select("id")
+        .eq("chef_profile_id", chefId);
+      const crewIds = (crewRows ?? []).map((r: { id: string }) => r.id);
+
+      let dishes: { id: string; dish_name: string }[] = [];
+      if (crewIds.length > 0) {
+        const { data } = await supabase
+          .from("signature_dishes")
+          .select("id, dish_name")
+          .in("assigned_crew_id", crewIds)
+          .eq("is_active", true)
+          .order("dish_name");
+        dishes = (data ?? []) as { id: string; dish_name: string }[];
+      }
+
+      const [totalHearts, { data: notes }] = await Promise.all([
+        getChefHeartTotal(chefId),
         supabase
           .from("thank_you_notes")
           .select("id, note_content, created_at")
@@ -34,14 +49,32 @@ const chefQuery = (chefId: string) =>
 
       return {
         chef: chef as ChefProfile,
-        totalHearts: heartsCount ?? 0,
+        totalHearts,
+        dishes,
         notes: (notes ?? []) as { id: string; note_content: string; created_at: string }[],
       };
     },
   });
 
 export const Route = createFileRoute("/chef/$chefId")({
-  head: ({ params }) => ({ meta: [{ title: `Chef — Cheftoman` }] }),
+  head: ({ params, loaderData }) => {
+    const name = loaderData?.chef?.full_name ?? "Chef";
+    const title = `${name} — Cheftoman`;
+    const description =
+      loaderData?.chef?.bio?.slice(0, 155) ??
+      `${name}'s kitchen recognition on Cheftoman — hearts from real diners at the table.`;
+    return {
+      meta: [
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        { property: "og:type", content: "profile" },
+        { property: "og:url", content: `/chef/${params.chefId}` },
+      ],
+      links: [{ rel: "canonical", href: `/chef/${params.chefId}` }],
+    };
+  },
   loader: ({ context, params }) => context.queryClient.ensureQueryData(chefQuery(params.chefId)),
   component: ChefPage,
   errorComponent: ({ error }) => <div className="p-6 text-sm text-destructive">{error.message}</div>,
@@ -51,40 +84,80 @@ export const Route = createFileRoute("/chef/$chefId")({
 function ChefPage() {
   const { chefId } = Route.useParams();
   const { data } = useSuspenseQuery(chefQuery(chefId));
-  const { chef, totalHearts, notes } = data;
+  const { chef, totalHearts, dishes, notes } = data;
 
   return (
-    <main className="mx-auto max-w-2xl px-5 py-8">
+    <main className="mx-auto max-w-2xl px-5 py-10">
       <Link to="/" className="text-xs text-muted-foreground hover:text-foreground">← Home</Link>
-      <div className="mt-4 flex items-center gap-4">
+
+      <header className="mt-6 flex items-center gap-5">
         {chef.photo_url ? (
-          <img src={chef.photo_url} alt={chef.full_name} className="size-20 rounded-full object-cover" width={80} height={80} loading="lazy" />
+          <img
+            src={chef.photo_url}
+            alt={chef.full_name}
+            className="size-24 rounded-full object-cover ring-2 ring-primary/20"
+            width={96}
+            height={96}
+            loading="lazy"
+          />
         ) : (
-          <div className="grid size-20 place-items-center rounded-full bg-secondary text-2xl text-secondary-foreground">
+          <div className="grid size-24 place-items-center rounded-full bg-secondary font-serif text-3xl text-secondary-foreground">
             {chef.full_name.charAt(0)}
           </div>
         )}
         <div>
-          <h1 className="text-3xl">{chef.full_name}</h1>
-          <div className="mt-1 text-sm text-muted-foreground">{chefTierLabel(totalHearts)}</div>
+          <h1 className="font-serif text-4xl leading-tight">{chef.full_name}</h1>
+          <div className="mt-1 inline-block rounded-full bg-primary/10 px-2.5 py-0.5 text-xs uppercase tracking-wider text-primary">
+            {chefTierLabel(totalHearts)}
+          </div>
         </div>
-      </div>
-      <div className="mt-4 max-w-xs">
+      </header>
+
+      <div className="mt-6 max-w-xs">
         <HeartButton count={totalHearts} label="Love Meter" />
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">Hearts come from diners at the table.</p>
-      {chef.bio && <p className="mt-4 text-sm text-muted-foreground">{chef.bio}</p>}
+      <p className="mt-2 text-xs text-muted-foreground">
+        Hearts come from diners seated at the table.
+      </p>
 
-      <section className="mt-8">
-        <h2 className="mb-3 text-2xl">Thank-you notes</h2>
-        {notes.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">No notes yet — be the first to write one from your table.</p>
+      {chef.bio && (
+        <p className="mt-6 text-base leading-relaxed text-muted-foreground">{chef.bio}</p>
+      )}
+
+      <section className="mt-10">
+        <h2 className="font-serif text-2xl">Signature dishes</h2>
+        {dishes.length === 0 ? (
+          <p className="mt-3 rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+            No signature dishes assigned yet.
+          </p>
         ) : (
-          <ul className="space-y-2">
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+            {dishes.map((d) => (
+              <li
+                key={d.id}
+                className="rounded-lg border border-border bg-card p-4 text-card-foreground"
+              >
+                {d.dish_name}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="mt-10">
+        <h2 className="font-serif text-2xl">Thank-you notes</h2>
+        {notes.length === 0 ? (
+          <p className="mt-3 rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+            No notes yet — be the first to write one from your table.
+          </p>
+        ) : (
+          <ul className="mt-3 space-y-2">
             {notes.map((n) => (
               <li key={n.id} className="rounded-lg border border-border bg-card p-4">
                 <p className="text-sm text-card-foreground">{n.note_content}</p>
-                <p className="mt-2 text-xs text-muted-foreground">{new Date(n.created_at).toLocaleDateString()}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {new Date(n.created_at).toLocaleDateString()}
+                </p>
               </li>
             ))}
           </ul>
