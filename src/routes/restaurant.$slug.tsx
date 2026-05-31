@@ -38,17 +38,15 @@ const restaurantQuery = (slug: string) =>
           .eq("restaurant_id", r.id),
       ]);
 
-      const chefs: Chef[] = (crew ?? [])
-        .map((row) => {
-          const cp = row.chef_profiles as unknown as
-            | { id: string; users: { full_name: string | null } | null }
-            | null;
-          return {
-            id: cp?.id ?? "",
-            full_name: cp?.users?.full_name ?? "Chef",
-            crew_role: row.crew_role as string,
-          };
-        })
+      const chefs: Chef[] = (crew as unknown as Array<{
+        crew_role: string;
+        chef_profiles: { id: string; users: { full_name: string | null } | null } | null;
+      }> ?? [])
+        .map((row) => ({
+          id: row.chef_profiles?.id ?? "",
+          full_name: row.chef_profiles?.users?.full_name ?? "Chef",
+          crew_role: row.crew_role,
+        }))
         .filter((c) => c.id)
         .sort((a, b) =>
           a.crew_role === "Head Chef" ? -1 : b.crew_role === "Head Chef" ? 1 : 0,
