@@ -38,6 +38,26 @@ export const Route = createFileRoute("/")({
         content:
           "Seated diners tap a heart and write a note. It goes straight to the kitchen team. Free pilot for restaurants.",
       },
+      { property: "og:type", content: "website" },
+      { property: "og:url", content: "/" },
+    ],
+    links: [{ rel: "canonical", href: "/" }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          name: "Cheftoman",
+          description:
+            "Presence-verified diner recognition that goes straight to the kitchen team.",
+          contactPoint: {
+            "@type": "ContactPoint",
+            contactType: "sales",
+            url: `https://wa.me/${WA_NUMBER}`,
+          },
+        }),
+      },
     ],
   }),
   component: Landing,
