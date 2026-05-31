@@ -2,8 +2,8 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
 import { chefTierLabel } from "@/lib/chefTier";
-import { HeartButton } from "@/components/HeartButton";
-import { getChefHeartTotal } from "@/lib/hearts";
+import { BackLink } from "@/components/BackLink";
+import { getChefHeartTotal, countHearts } from "@/lib/hearts";
 
 type ChefProfile = {
   id: string;
@@ -18,6 +18,8 @@ type ChefRow = {
   user_id: string;
   users: { full_name: string | null; profile_photo_url: string | null } | null;
 };
+
+type PrimaryRestaurant = { slug: string; name: string } | null;
 
 const chefQuery = (chefId: string) =>
   queryOptions({
@@ -39,14 +41,21 @@ const chefQuery = (chefId: string) =>
         photo_url: chefRow.users?.profile_photo_url ?? null,
       };
 
-      // crew rows + assigned signature dishes for this chef
+      // crew rows for ownership + back-link fallback
       const { data: crewRows } = await supabase
         .from("restaurant_crew")
-        .select("id")
+        .select("id, restaurants:restaurant_id(slug, name)")
         .eq("chef_profile_id", chefId);
-      const crewIds = (crewRows ?? []).map((r) => r.id);
+      const crew = (crewRows ?? []) as Array<{
+        id: string;
+        restaurants: { slug: string; name: string } | null;
+      }>;
+      const crewIds = crew.map((r) => r.id);
+      const primaryRestaurant: PrimaryRestaurant =
+        crew.find((r) => r.restaurants)?.restaurants ?? null;
 
       let dishes: { id: string; dish_name: string }[] = [];
+      let dishIds: string[] = [];
       if (crewIds.length > 0) {
         const { data } = await supabase
           .from("signature_dishes")
@@ -55,9 +64,12 @@ const chefQuery = (chefId: string) =>
           .eq("is_active", true)
           .order("dish_name");
         dishes = (data ?? []) as { id: string; dish_name: string }[];
+        dishIds = dishes.map((d) => d.id);
       }
 
-      const [totalHearts, { data: notes }] = await Promise.all([
+      const [chefHearts, dishHearts, totalHearts, { data: notes }] = await Promise.all([
+        countHearts("chef_profile", chefId),
+        countHearts("dish", dishIds),
         getChefHeartTotal(chefId),
         supabase
           .from("thank_you_notes")
@@ -69,7 +81,10 @@ const chefQuery = (chefId: string) =>
 
       return {
         chef,
+        primaryRestaurant,
         totalHearts,
+        chefHearts,
+        dishHearts,
         dishes,
         notes: (notes ?? []) as { id: string; note_content: string; created_at: string }[],
       };
@@ -105,58 +120,86 @@ export const Route = createFileRoute("/chef/$chefId")({
 function ChefPage() {
   const { chefId } = Route.useParams();
   const { data } = useSuspenseQuery(chefQuery(chefId));
-  const { chef, totalHearts, dishes, notes } = data;
+  const { chef, primaryRestaurant, totalHearts, chefHearts, dishHearts, dishes, notes } = data;
 
   return (
-    <main className="mx-auto max-w-2xl px-5 py-10">
-      <Link to="/" className="text-xs text-muted-foreground hover:text-foreground">← Home</Link>
+    <main className="mx-auto max-w-3xl px-5 py-6 pb-16 space-y-12">
+      <BackLink
+        fallbackTo={primaryRestaurant ? "/restaurant/$slug" : "/"}
+        fallbackParams={primaryRestaurant ? { slug: primaryRestaurant.slug } : undefined}
+      />
 
-      <header className="mt-6 flex items-center gap-5">
+      {/* Hero */}
+      <header className="flex flex-col items-start gap-6 sm:flex-row sm:items-center">
         {chef.photo_url ? (
           <img
             src={chef.photo_url}
             alt={chef.full_name}
-            className="size-24 rounded-full object-cover ring-2 ring-primary/20"
-            width={96}
-            height={96}
-            loading="lazy"
+            className="size-32 rounded-full object-cover ring-1 ring-border"
+            width={128}
+            height={128}
+            loading="eager"
           />
         ) : (
-          <div className="grid size-24 place-items-center rounded-full bg-secondary font-serif text-3xl text-secondary-foreground">
+          <div className="grid size-32 place-items-center rounded-full bg-secondary font-serif text-5xl text-secondary-foreground">
             {chef.full_name.charAt(0)}
           </div>
         )}
-        <div>
-          <h1 className="font-serif text-4xl leading-tight">{chef.full_name}</h1>
-          <div className="mt-1 inline-block rounded-full bg-primary/10 px-2.5 py-0.5 text-xs uppercase tracking-wider text-primary">
-            {chefTierLabel(totalHearts)}
+        <div className="space-y-3">
+          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Chef</div>
+          <h1 className="font-serif text-5xl leading-[1.05]">{chef.full_name}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs uppercase tracking-wider text-primary">
+              {chefTierLabel(totalHearts)}
+            </span>
+            {primaryRestaurant && (
+              <Link
+                to="/restaurant/$slug"
+                params={{ slug: primaryRestaurant.slug }}
+                className="text-xs text-muted-foreground underline hover:text-foreground"
+              >
+                {primaryRestaurant.name}
+              </Link>
+            )}
           </div>
         </div>
       </header>
 
-      <div className="mt-6 max-w-xs">
-        <HeartButton count={totalHearts} label="Love Meter" />
-      </div>
-      <p className="mt-2 text-xs text-muted-foreground">
-        Hearts come from diners seated at the table.
-      </p>
+      {/* Love Meter */}
+      <section className="rounded-2xl border border-border bg-card p-6">
+        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Love Meter</div>
+        <div className="mt-2 flex items-baseline gap-3">
+          <span aria-hidden className="text-3xl text-primary">♥</span>
+          <span className="font-serif text-5xl text-primary tabular-nums">{totalHearts}</span>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {chefHearts} for the chef · {dishHearts} for assigned dishes. Hearts come from
+          diners seated at the table.
+        </p>
+      </section>
 
+      {/* Bio */}
       {chef.bio && (
-        <p className="mt-6 text-base leading-relaxed text-muted-foreground">{chef.bio}</p>
+        <section className="max-w-prose">
+          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">About</div>
+          <p className="mt-3 font-serif text-lg leading-relaxed text-foreground">{chef.bio}</p>
+        </section>
       )}
 
-      <section className="mt-10">
-        <h2 className="font-serif text-2xl">Signature dishes</h2>
+      {/* Signature dishes */}
+      <section>
+        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">From the pass</div>
+        <h2 className="mt-2 mb-4 font-serif text-3xl">Signature dishes</h2>
         {dishes.length === 0 ? (
-          <p className="mt-3 rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+          <p className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">
             No signature dishes assigned yet.
           </p>
         ) : (
-          <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+          <ul className="grid gap-3 sm:grid-cols-2">
             {dishes.map((d) => (
               <li
                 key={d.id}
-                className="rounded-lg border border-border bg-card p-4 text-card-foreground"
+                className="rounded-xl border border-border bg-card p-4 font-serif text-base text-card-foreground"
               >
                 {d.dish_name}
               </li>
@@ -165,18 +208,25 @@ function ChefPage() {
         )}
       </section>
 
-      <section className="mt-10">
-        <h2 className="font-serif text-2xl">Thank-you notes</h2>
+      {/* Thank-you notes */}
+      <section>
+        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">From the dining room</div>
+        <h2 className="mt-2 mb-4 font-serif text-3xl">Thank-you notes</h2>
         {notes.length === 0 ? (
-          <p className="mt-3 rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+          <p className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">
             No notes yet — be the first to write one from your table.
           </p>
         ) : (
-          <ul className="mt-3 space-y-2">
+          <ul className="space-y-3">
             {notes.map((n) => (
-              <li key={n.id} className="rounded-lg border border-border bg-card p-4">
-                <p className="text-sm text-card-foreground">{n.note_content}</p>
-                <p className="mt-2 text-xs text-muted-foreground">
+              <li
+                key={n.id}
+                className="rounded-2xl bg-secondary/40 p-5 text-card-foreground"
+              >
+                <p className="font-serif text-base italic leading-relaxed">
+                  &ldquo;{n.note_content}&rdquo;
+                </p>
+                <p className="mt-3 text-xs uppercase tracking-wider text-muted-foreground">
                   {new Date(n.created_at).toLocaleDateString()}
                 </p>
               </li>
