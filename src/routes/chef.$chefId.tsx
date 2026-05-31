@@ -58,10 +58,11 @@ const chefQuery = (chefId: string) =>
 
 export const Route = createFileRoute("/chef/$chefId")({
   head: ({ params, loaderData }) => {
-    const name = loaderData?.chef?.full_name ?? "Chef";
+    const d = loaderData as { chef?: ChefProfile } | undefined;
+    const name = d?.chef?.full_name ?? "Chef";
     const title = `${name} — Cheftoman`;
     const description =
-      loaderData?.chef?.bio?.slice(0, 155) ??
+      d?.chef?.bio?.slice(0, 155) ??
       `${name}'s kitchen recognition on Cheftoman — hearts from real diners at the table.`;
     return {
       meta: [
