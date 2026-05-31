@@ -3,10 +3,16 @@ import { useState } from "react";
 import { StickyWhatsApp } from "@/components/marketing/StickyWhatsApp";
 import { ScrollPopup } from "@/components/marketing/ScrollPopup";
 
-const WA_NUMBER = "__WA_NUMBER__"; // TODO: replace with real international number, no + or spaces
+const WA_NUMBER = "4915123702524";
+// TODO: swap to info@cheftoman.com when domain email is live
+const EMAIL_FALLBACK = "cheftoman_official@outlook.com";
 
 function buildWaUrl(message: string) {
   return `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(message)}`;
+}
+
+function buildMailto(subject: string, body: string) {
+  return `mailto:${EMAIL_FALLBACK}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 const HERO_MSG =
