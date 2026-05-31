@@ -4,7 +4,11 @@ import { zodValidator } from "@tanstack/zod-adapter";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
-import { getOrCreateAnonymousSessionToken, bumpNudgeCount, getNudgeCount } from "@/lib/anonymousSession";
+import {
+  getOrCreateAnonymousSessionToken,
+  bumpNudgeCount,
+  getNudgeCount,
+} from "@/lib/anonymousSession";
 import { useAuth } from "@/lib/auth";
 import { HeartButton as UIHeartButton } from "@/components/HeartButton";
 import { VisitProofForm } from "@/components/VisitProofForm";
@@ -13,6 +17,8 @@ import { toast } from "sonner";
 const SearchSchema = z.object({
   src: z.enum(["nfc", "qr", "link"]).default("link").catch("link"),
 });
+
+export type EntryMethod = z.infer<typeof SearchSchema>["src"];
 
 export const Route = createFileRoute("/table/$tableId")({
   validateSearch: zodValidator(SearchSchema),
@@ -31,6 +37,21 @@ type TableInfo = {
   restaurant: { id: string; name: string; slug: string };
 };
 
+type TableRow = {
+  id: string;
+  table_number: string | number | null;
+  restaurant_id: string;
+  restaurants: { id: string; name: string; slug: string } | null;
+};
+
+type CrewRow = {
+  chef_profile_id: string;
+  crew_role: string;
+  chef_profiles:
+    | { id: string; users: { full_name: string | null } | null }
+    | null;
+};
+
 async function fetchTableContext(tableId: string) {
   const { data: t, error } = await supabase
     .from("restaurant_tables")
@@ -39,23 +60,32 @@ async function fetchTableContext(tableId: string) {
     .maybeSingle();
   if (error) throw error;
   if (!t) throw new Error("Table not found");
-  const restaurant = (t as any).restaurants as { id: string; name: string; slug: string };
+  const tRow = t as unknown as TableRow;
+  const restaurant = tRow.restaurants;
+  if (!restaurant) throw new Error("Table has no restaurant");
 
   const [{ data: dishes }, { data: crew }] = await Promise.all([
-    supabase.from("signature_dishes").select("id, dish_name").eq("restaurant_id", restaurant.id).eq("is_active", true).limit(20),
+    supabase
+      .from("signature_dishes")
+      .select("id, dish_name")
+      .eq("restaurant_id", restaurant.id)
+      .eq("is_active", true)
+      .limit(20),
     supabase
       .from("restaurant_crew")
-      .select("chef_profile_id, crew_role, chef_profiles:chef_profile_id(id, full_name)")
+      .select("chef_profile_id, crew_role, chef_profiles:chef_profile_id(id, user_id, users:user_id(full_name))")
       .eq("restaurant_id", restaurant.id),
   ]);
 
-  const chefs: Chef[] = (crew ?? [])
-    .map((r: any) => r.chef_profiles)
-    .filter(Boolean)
-    .map((c: any) => ({ id: c.id, full_name: c.full_name }));
+  const chefs: Chef[] = ((crew as unknown as CrewRow[] | null) ?? [])
+    .map((r) => ({
+      id: r.chef_profiles?.id ?? "",
+      full_name: r.chef_profiles?.users?.full_name ?? "Chef",
+    }))
+    .filter((c) => c.id);
 
   return {
-    table: { id: t.id, table_number: (t as any).table_number, restaurant } as TableInfo,
+    table: { id: tRow.id, table_number: tRow.table_number, restaurant } as TableInfo,
     dishes: (dishes ?? []) as Dish[],
     chefs,
   };
@@ -70,7 +100,17 @@ async function fetchHeartCount(targetType: string, targetId: string): Promise<nu
   return count ?? 0;
 }
 
-function HeartRow({ targetType, targetId, label }: { targetType: string; targetId: string; label: string }) {
+function HeartRow({
+  targetType,
+  targetId,
+  label,
+  entryMethod,
+}: {
+  targetType: string;
+  targetId: string;
+  label: string;
+  entryMethod: EntryMethod;
+}) {
   const qc = useQueryClient();
   const { user } = useAuth();
   const key = ["hearts-count", targetType, targetId];
@@ -91,17 +131,20 @@ function HeartRow({ targetType, targetId, label }: { targetType: string; targetI
     return () => {
       void supabase.removeChannel(ch);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetType, targetId, qc]);
 
   async function tap() {
     const token = getOrCreateAnonymousSessionToken();
-    const payload: Record<string, unknown> = {
+    // Reuse the existing is_gps_verified flag to carry presence proof.
+    // NFC tap = device was physically at the table; QR / link = unverified.
+    const { error } = await supabase.from("hearts").insert({
       target_type: targetType,
       target_id: targetId,
       anonymous_session_token: token,
-    };
-    if (user) payload.from_user_id = user.id;
-    const { error } = await supabase.from("hearts").insert(payload);
+      from_user_id: user?.id ?? null,
+      is_gps_verified: entryMethod === "nfc",
+    });
     if (error) {
       toast.error(error.message);
       return;
@@ -153,7 +196,10 @@ function TablePage() {
   return (
     <main className="mx-auto max-w-md px-5 py-6 pb-32">
       <div className="text-xs uppercase tracking-wider text-muted-foreground">
-        Table {table.table_number ?? ""} {src === "nfc" && <span className="ml-1 rounded bg-primary/10 px-1.5 py-0.5 text-primary">NFC verified</span>}
+        Table {table.table_number ?? ""}{" "}
+        {src === "nfc" && (
+          <span className="ml-1 rounded bg-primary/10 px-1.5 py-0.5 text-primary">NFC verified</span>
+        )}
       </div>
       <h1 className="mt-1 text-3xl">{table.restaurant.name}</h1>
       <Link to="/restaurant/$slug" params={{ slug: table.restaurant.slug }} className="text-xs text-muted-foreground underline">
@@ -167,7 +213,7 @@ function TablePage() {
           <ul className="space-y-2">
             {chefs.map((c) => (
               <li key={c.id}>
-                <HeartRow targetType="chef_profile" targetId={c.id} label={c.full_name} />
+                <HeartRow targetType="chef_profile" targetId={c.id} label={c.full_name} entryMethod={src} />
               </li>
             ))}
           </ul>
@@ -181,7 +227,7 @@ function TablePage() {
           <ul className="space-y-2">
             {dishes.map((d) => (
               <li key={d.id}>
-                <HeartRow targetType="dish" targetId={d.id} label={d.dish_name} />
+                <HeartRow targetType="dish" targetId={d.id} label={d.dish_name} entryMethod={src} />
               </li>
             ))}
           </ul>
@@ -214,7 +260,6 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">{children}</p>;
 }
 
-
 function ThankYouForm({ chefs, foodieProfileId }: { chefs: Chef[]; foodieProfileId: string | null }) {
   const [chefId, setChefId] = useState<string>("");
   const [content, setContent] = useState("");
@@ -231,13 +276,12 @@ function ThankYouForm({ chefs, foodieProfileId }: { chefs: Chef[]; foodieProfile
     setBusy(true);
     try {
       const token = getOrCreateAnonymousSessionToken();
-      const payload: Record<string, unknown> = {
+      const { error } = await supabase.from("thank_you_notes").insert({
         target_chef_id: chefId,
         note_content: content.trim(),
         anonymous_session_token: token,
-      };
-      if (foodieProfileId) payload.from_foodie_id = foodieProfileId;
-      const { error } = await supabase.from("thank_you_notes").insert(payload);
+        from_foodie_id: foodieProfileId,
+      });
       if (error) throw error;
       setContent("");
       if (!user) bumpNudgeCount();
