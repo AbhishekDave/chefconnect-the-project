@@ -33,13 +33,20 @@ function OpsPage() {
     <main className="mx-auto max-w-3xl px-5 pb-12">
       <h1 className="text-3xl">Venue Love Meter</h1>
       {crewQ.data.restaurantIds.map((rid) => (
-        <RestaurantOps key={rid} restaurantId={rid} chefProfileIds={crewQ.data!.chefProfileIds} />
+        <RestaurantOps key={rid} restaurantId={rid} />
       ))}
     </main>
   );
 }
 
-function RestaurantOps({ restaurantId, chefProfileIds }: { restaurantId: string; chefProfileIds: string[] }) {
+type CrewRow = {
+  id: string;
+  chef_profiles:
+    | { id: string; users: { full_name: string | null } | null }
+    | null;
+};
+
+function RestaurantOps({ restaurantId }: { restaurantId: string }) {
   const qc = useQueryClient();
 
   // restaurant meta
@@ -50,44 +57,57 @@ function RestaurantOps({ restaurantId, chefProfileIds }: { restaurantId: string;
         supabase.from("restaurants").select("id, name").eq("id", restaurantId).maybeSingle(),
         supabase
           .from("signature_dishes")
-          .select("id, dish_name, hearts_count, assigned_crew_id")
+          .select("id, dish_name, assigned_crew_id")
           .eq("restaurant_id", restaurantId)
           .eq("is_active", true),
         supabase
           .from("restaurant_crew")
-          .select("id, chef_profiles:chef_profile_id(id, full_name)")
+          .select("id, chef_profiles:chef_profile_id(id, user_id, users:user_id(full_name))")
           .eq("restaurant_id", restaurantId),
       ]);
-      const chefs = (crew ?? [])
-        .map((row: any) => ({
-          crewId: row.id as string,
-          ...(row.chef_profiles as { id: string; full_name: string } | null),
+      const chefs = ((crew as unknown as CrewRow[] | null) ?? [])
+        .map((row) => ({
+          crewId: row.id,
+          id: row.chef_profiles?.id ?? "",
+          full_name: row.chef_profiles?.users?.full_name ?? "Chef",
         }))
-        .filter((c) => c.id) as { id: string; full_name: string; crewId: string }[];
+        .filter((c) => c.id);
       return {
         restaurant: r as { id: string; name: string } | null,
-        dishes: (dishes ?? []) as { id: string; dish_name: string; hearts_count: number | null; assigned_crew_id: string | null }[],
+        dishes: (dishes ?? []) as { id: string; dish_name: string; assigned_crew_id: string | null }[],
         chefs,
       };
     },
   });
 
-  // hearts (all for this restaurant's targets)
   const dishIds = useMemo(() => meta.data?.dishes.map((d) => d.id) ?? [], [meta.data]);
   const chefIds = useMemo(() => meta.data?.chefs.map((c) => c.id) ?? [], [meta.data]);
 
+  // Hearts: two filtered queries, no phantom restaurant target.
   const hearts = useQuery({
     queryKey: ["ops-hearts", restaurantId, dishIds.join(","), chefIds.join(",")],
     enabled: meta.isSuccess,
     queryFn: async () => {
-      const ids = [restaurantId, ...dishIds, ...chefIds];
-      if (ids.length === 0) return [];
-      const { data, error } = await supabase
-        .from("hearts")
-        .select("target_type, target_id")
-        .in("target_id", ids);
-      if (error) throw error;
-      return (data ?? []) as { target_type: string; target_id: string }[];
+      const out: { target_type: string; target_id: string }[] = [];
+      if (chefIds.length > 0) {
+        const { data, error } = await supabase
+          .from("hearts")
+          .select("target_type, target_id")
+          .eq("target_type", "chef_profile")
+          .in("target_id", chefIds);
+        if (error) throw error;
+        out.push(...((data ?? []) as { target_type: string; target_id: string }[]));
+      }
+      if (dishIds.length > 0) {
+        const { data, error } = await supabase
+          .from("hearts")
+          .select("target_type, target_id")
+          .eq("target_type", "dish")
+          .in("target_id", dishIds);
+        if (error) throw error;
+        out.push(...((data ?? []) as { target_type: string; target_id: string }[]));
+      }
+      return out;
     },
   });
 
@@ -112,7 +132,14 @@ function RestaurantOps({ restaurantId, chefProfileIds }: { restaurantId: string;
         .order("created_at", { ascending: false })
         .limit(30);
       if (error) throw error;
-      return (data ?? []).filter((c: any) => c.restaurant_tables?.restaurant_id === restaurantId);
+      return (data as unknown as Array<{
+        id: string;
+        entry_method: string | null;
+        is_verified_presence: boolean | null;
+        created_at: string;
+        table_id: string;
+        restaurant_tables: { table_number: string | number | null; restaurant_id: string } | null;
+      }> ?? []).filter((c) => c.restaurant_tables?.restaurant_id === restaurantId);
     },
   });
 
@@ -148,11 +175,11 @@ function RestaurantOps({ restaurantId, chefProfileIds }: { restaurantId: string;
   }, [restaurantId, qc]);
 
   const heartList = hearts.data ?? [];
+  // Total = chef-target + dish-target hearts only (no phantom restaurant target).
   const total = heartList.length;
   const perDish = (meta.data?.dishes ?? [])
     .map((d) => ({ ...d, n: heartList.filter((h) => h.target_type === "dish" && h.target_id === d.id).length }))
     .sort((a, b) => b.n - a.n);
-  // Per-chef rollup: hearts on chef_profile PLUS hearts on dishes assigned to that chef's crew rows
   const perChef = (meta.data?.chefs ?? [])
     .map((c) => {
       const directHearts = heartList.filter(
@@ -174,6 +201,9 @@ function RestaurantOps({ restaurantId, chefProfileIds }: { restaurantId: string;
       <div className="mt-3 rounded-lg border border-border bg-card p-5">
         <div className="text-xs uppercase tracking-wider text-muted-foreground">Hearts received</div>
         <div className="mt-1 text-5xl text-primary tabular-nums">{total}</div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Chef hearts + dish hearts. No phantom restaurant target.
+        </p>
       </div>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -213,7 +243,7 @@ function RestaurantOps({ restaurantId, chefProfileIds }: { restaurantId: string;
             <Empty>No connections yet.</Empty>
           ) : (
             <ul className="space-y-2">
-              {conns.data.map((c: any) => (
+              {conns.data.map((c) => (
                 <li key={c.id} className="flex items-center justify-between text-xs">
                   <span className="text-card-foreground">
                     Table {c.restaurant_tables?.table_number ?? "?"}
@@ -230,7 +260,7 @@ function RestaurantOps({ restaurantId, chefProfileIds }: { restaurantId: string;
             <Empty>No notes yet.</Empty>
           ) : (
             <ul className="space-y-2">
-              {notes.data.map((n: any) => {
+              {notes.data.map((n) => {
                 const chef = meta.data?.chefs.find((c) => c.id === n.target_chef_id);
                 return (
                   <li key={n.id} className="rounded border border-border p-2 text-xs">
