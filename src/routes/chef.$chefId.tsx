@@ -5,26 +5,46 @@ import { chefTierLabel } from "@/lib/chefTier";
 import { HeartButton } from "@/components/HeartButton";
 import { getChefHeartTotal } from "@/lib/hearts";
 
-type ChefProfile = { id: string; full_name: string; bio: string | null; photo_url: string | null };
+type ChefProfile = {
+  id: string;
+  full_name: string;
+  bio: string | null;
+  photo_url: string | null;
+};
+
+type ChefRow = {
+  id: string;
+  bio: string | null;
+  user_id: string;
+  users: { full_name: string | null; profile_photo_url: string | null } | null;
+};
 
 const chefQuery = (chefId: string) =>
   queryOptions({
     queryKey: ["chef", chefId],
     queryFn: async () => {
-      const { data: chef, error } = await supabase
+      const { data: row, error } = await supabase
         .from("chef_profiles")
-        .select("id, full_name, bio, photo_url")
+        .select("id, bio, user_id, users:user_id(full_name, profile_photo_url)")
         .eq("id", chefId)
         .maybeSingle();
       if (error) throw error;
-      if (!chef) throw notFound();
+      if (!row) throw notFound();
+
+      const chefRow = row as unknown as ChefRow;
+      const chef: ChefProfile = {
+        id: chefRow.id,
+        bio: chefRow.bio,
+        full_name: chefRow.users?.full_name ?? "Chef",
+        photo_url: chefRow.users?.profile_photo_url ?? null,
+      };
 
       // crew rows + assigned signature dishes for this chef
       const { data: crewRows } = await supabase
         .from("restaurant_crew")
         .select("id")
         .eq("chef_profile_id", chefId);
-      const crewIds = (crewRows ?? []).map((r: { id: string }) => r.id);
+      const crewIds = (crewRows ?? []).map((r) => r.id);
 
       let dishes: { id: string; dish_name: string }[] = [];
       if (crewIds.length > 0) {
@@ -48,7 +68,7 @@ const chefQuery = (chefId: string) =>
       ]);
 
       return {
-        chef: chef as ChefProfile,
+        chef,
         totalHearts,
         dishes,
         notes: (notes ?? []) as { id: string; note_content: string; created_at: string }[],
