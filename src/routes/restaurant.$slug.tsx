@@ -102,6 +102,14 @@ function useLiveHeartCount(targetType: string, targetId: string) {
   return q.data ?? 0;
 }
 
+function ChefRollupBadge({ chefProfileId }: { chefProfileId: string }) {
+  const { data } = useQuery({
+    queryKey: ["chef-rollup", chefProfileId],
+    queryFn: () => getChefHeartTotal(chefProfileId),
+  });
+  return <span className="text-xs text-primary tabular-nums">♥ {data ?? 0}</span>;
+}
+
 function HeartBadge({ targetType, targetId }: { targetType: string; targetId: string }) {
   const n = useLiveHeartCount(targetType, targetId);
   return <span className="text-xs text-primary tabular-nums">♥ {n}</span>;
