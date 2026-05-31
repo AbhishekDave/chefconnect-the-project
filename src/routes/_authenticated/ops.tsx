@@ -48,18 +48,25 @@ function RestaurantOps({ restaurantId, chefProfileIds }: { restaurantId: string;
     queryFn: async () => {
       const [{ data: r }, { data: dishes }, { data: crew }] = await Promise.all([
         supabase.from("restaurants").select("id, name").eq("id", restaurantId).maybeSingle(),
-        supabase.from("signature_dishes").select("id, dish_name, hearts_count").eq("restaurant_id", restaurantId).eq("is_active", true),
+        supabase
+          .from("signature_dishes")
+          .select("id, dish_name, hearts_count, assigned_crew_id")
+          .eq("restaurant_id", restaurantId)
+          .eq("is_active", true),
         supabase
           .from("restaurant_crew")
-          .select("chef_profiles:chef_profile_id(id, full_name)")
+          .select("id, chef_profiles:chef_profile_id(id, full_name)")
           .eq("restaurant_id", restaurantId),
       ]);
       const chefs = (crew ?? [])
-        .map((row: any) => row.chef_profiles)
-        .filter(Boolean) as { id: string; full_name: string }[];
+        .map((row: any) => ({
+          crewId: row.id as string,
+          ...(row.chef_profiles as { id: string; full_name: string } | null),
+        }))
+        .filter((c) => c.id) as { id: string; full_name: string; crewId: string }[];
       return {
         restaurant: r as { id: string; name: string } | null,
-        dishes: (dishes ?? []) as { id: string; dish_name: string; hearts_count: number | null }[],
+        dishes: (dishes ?? []) as { id: string; dish_name: string; hearts_count: number | null; assigned_crew_id: string | null }[],
         chefs,
       };
     },
