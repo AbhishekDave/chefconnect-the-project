@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { z } from "zod";
 import { zodValidator } from "@tanstack/zod-adapter";
 import { useEffect, useState } from "react";
@@ -12,6 +12,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { HeartButton as UIHeartButton } from "@/components/HeartButton";
 import { VisitProofForm } from "@/components/VisitProofForm";
+import { countHearts } from "@/lib/hearts";
 import { toast } from "sonner";
 
 const SearchSchema = z.object({
@@ -20,12 +21,27 @@ const SearchSchema = z.object({
 
 export type EntryMethod = z.infer<typeof SearchSchema>["src"];
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const Route = createFileRoute("/table/$tableId")({
   validateSearch: zodValidator(SearchSchema),
   head: () => ({ meta: [{ title: "At the table — Cheftoman" }] }),
   component: TablePage,
   errorComponent: ({ error }) => (
     <div className="p-6 text-sm text-destructive">{error.message}</div>
+  ),
+  notFoundComponent: () => (
+    <main className="mx-auto max-w-md px-5 py-10">
+      <h1 className="font-serif text-3xl">Table not found</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        The NFC tag or link you used isn't linked to a table yet. Ask a server to
+        check it.
+      </p>
+      <Link to="/" className="mt-6 inline-block text-xs text-muted-foreground hover:text-foreground">
+        ← Home
+      </Link>
+    </main>
   ),
 });
 
@@ -53,13 +69,30 @@ type CrewRow = {
 };
 
 async function fetchTableContext(tableId: string) {
-  const { data: t, error } = await supabase
+  const cols =
+    "id, table_number, restaurant_id, restaurants:restaurant_id(id, name, slug)";
+
+  // 1. Try table_slug (NFC tags encode the slug, not the UUID).
+  let { data: t, error } = await supabase
     .from("restaurant_tables")
-    .select("id, table_number, restaurant_id, restaurants:restaurant_id(id, name, slug)")
-    .eq("id", tableId)
+    .select(cols)
+    .eq("table_slug", tableId)
     .maybeSingle();
+
+  // 2. Fall back to UUID lookup only if it looks like one.
+  if (!t && !error && UUID_RE.test(tableId)) {
+    const res = await supabase
+      .from("restaurant_tables")
+      .select(cols)
+      .eq("id", tableId)
+      .maybeSingle();
+    t = res.data;
+    error = res.error;
+  }
+
   if (error) throw error;
-  if (!t) throw new Error("Table not found");
+  if (!t) throw notFound();
+
   const tRow = t as unknown as TableRow;
   const restaurant = tRow.restaurants;
   if (!restaurant) throw new Error("Table has no restaurant");
@@ -91,33 +124,46 @@ async function fetchTableContext(tableId: string) {
   };
 }
 
-async function fetchHeartCount(targetType: string, targetId: string): Promise<number> {
-  const { count } = await supabase
-    .from("hearts")
-    .select("*", { count: "exact", head: true })
-    .eq("target_type", targetType)
-    .eq("target_id", targetId);
-  return count ?? 0;
-}
-
 function HeartRow({
   targetType,
   targetId,
   label,
   entryMethod,
 }: {
-  targetType: string;
+  targetType: "chef_profile" | "dish";
   targetId: string;
   label: string;
   entryMethod: EntryMethod;
 }) {
   const qc = useQueryClient();
   const { user } = useAuth();
-  const key = ["hearts-count", targetType, targetId];
+  const identity = user?.id ?? `anon:${getOrCreateAnonymousSessionToken()}`;
+  const countKey = ["hearts-count", targetType, targetId];
+  const heartedKey = ["hearted", identity, targetType, targetId];
+
   const { data: count = 0 } = useQuery({
-    queryKey: key,
-    queryFn: () => fetchHeartCount(targetType, targetId),
+    queryKey: countKey,
+    queryFn: () => countHearts(targetType, targetId),
   });
+
+  const { data: myHeart } = useQuery({
+    queryKey: heartedKey,
+    queryFn: async () => {
+      let q = supabase
+        .from("hearts")
+        .select("id")
+        .eq("target_type", targetType)
+        .eq("target_id", targetId)
+        .limit(1);
+      q = user
+        ? q.eq("from_user_id", user.id)
+        : q.eq("anonymous_session_token", getOrCreateAnonymousSessionToken());
+      const { data, error } = await q.maybeSingle();
+      if (error) throw error;
+      return data as { id: string } | null;
+    },
+  });
+  const hearted = !!myHeart;
 
   useEffect(() => {
     const ch = supabase
@@ -125,35 +171,57 @@ function HeartRow({
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "hearts", filter: `target_id=eq.${targetId}` },
-        () => qc.invalidateQueries({ queryKey: key }),
+        () => {
+          qc.invalidateQueries({ queryKey: countKey });
+          qc.invalidateQueries({ queryKey: heartedKey });
+        },
       )
       .subscribe();
     return () => {
       void supabase.removeChannel(ch);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetType, targetId, qc]);
+  }, [targetType, targetId, qc, identity]);
 
   async function tap() {
-    const token = getOrCreateAnonymousSessionToken();
-    // Reuse the existing is_gps_verified flag to carry presence proof.
-    // NFC tap = device was physically at the table; QR / link = unverified.
-    const { error } = await supabase.from("hearts").insert({
-      target_type: targetType,
-      target_id: targetId,
-      anonymous_session_token: token,
-      from_user_id: user?.id ?? null,
-      is_gps_verified: entryMethod === "nfc",
-    });
-    if (error) {
-      toast.error(error.message);
-      return;
+    // Toggle: if this diner already has a heart row, remove it; else insert.
+    // Client-side dedupe only — DB-level uniqueness is a Phase 2 constraint:
+    // unique(target_type, target_id, coalesce(from_user_id::text, anonymous_session_token)).
+    if (myHeart) {
+      const { error } = await supabase.from("hearts").delete().eq("id", myHeart.id);
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+    } else {
+      const token = getOrCreateAnonymousSessionToken();
+      const { error } = await supabase.from("hearts").insert({
+        target_type: targetType,
+        target_id: targetId,
+        anonymous_session_token: token,
+        from_user_id: user?.id ?? null,
+        // Reuse is_gps_verified as presence proof: NFC tap = at the table.
+        is_gps_verified: entryMethod === "nfc",
+      });
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      if (!user) bumpNudgeCount();
     }
-    if (!user) bumpNudgeCount();
-    qc.invalidateQueries({ queryKey: key });
+    qc.invalidateQueries({ queryKey: countKey });
+    qc.invalidateQueries({ queryKey: heartedKey });
   }
 
-  return <UIHeartButton interactive count={count} label={label} onHeart={tap} />;
+  return (
+    <UIHeartButton
+      interactive
+      count={count}
+      label={label}
+      hearted={hearted}
+      onHeart={tap}
+    />
+  );
 }
 
 function TablePage() {
@@ -164,18 +232,21 @@ function TablePage() {
   const tableQuery = useQuery({
     queryKey: ["table-ctx", tableId],
     queryFn: () => fetchTableContext(tableId),
+    retry: false,
   });
 
-  // Log table_connection once on mount
+  const resolvedTableUuid = tableQuery.data?.table.id ?? null;
+
+  // Log table_connection once on mount, keyed by the resolved UUID.
   useEffect(() => {
-    if (!tableQuery.data) return;
+    if (!resolvedTableUuid) return;
     const token = getOrCreateAnonymousSessionToken();
-    const key = `cheftoman.connected.${tableId}`;
+    const key = `cheftoman.connected.${resolvedTableUuid}`;
     if (typeof window !== "undefined" && window.sessionStorage.getItem(key)) return;
     void supabase
       .from("table_connections")
       .insert({
-        table_id: tableId,
+        table_id: resolvedTableUuid,
         anonymous_session_token: token,
         entry_method: src,
         is_verified_presence: src === "nfc",
@@ -184,10 +255,13 @@ function TablePage() {
         if (!error && typeof window !== "undefined") window.sessionStorage.setItem(key, "1");
         else if (error) console.warn("table_connections insert", error);
       });
-  }, [tableQuery.data, tableId, src]);
+  }, [resolvedTableUuid, src]);
 
   if (tableQuery.isLoading) return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
-  if (tableQuery.error) return <p className="p-6 text-sm text-destructive">{(tableQuery.error as Error).message}</p>;
+  if (tableQuery.error) {
+    // notFound() bubbles up via the route's notFoundComponent; surface other errors.
+    return <p className="p-6 text-sm text-destructive">{(tableQuery.error as Error).message}</p>;
+  }
   if (!tableQuery.data) return null;
 
   const { table, dishes, chefs } = tableQuery.data;
@@ -235,7 +309,7 @@ function TablePage() {
       </Section>
 
       <Section title="Prove you ate here">
-        <VisitProofForm tableId={tableId} restaurantId={table.restaurant.id} foodieProfileId={foodieProfileId} />
+        <VisitProofForm tableId={table.id} restaurantId={table.restaurant.id} foodieProfileId={foodieProfileId} />
       </Section>
 
       <Section title="Write a thank-you note">
@@ -283,9 +357,12 @@ function ThankYouForm({ chefs, foodieProfileId }: { chefs: Chef[]; foodieProfile
         from_foodie_id: foodieProfileId,
       });
       if (error) throw error;
-      setContent("");
       if (!user) bumpNudgeCount();
-      toast.success(`Goes straight to ${chefName}'s kitchen team.`);
+      toast.success("Sent to the kitchen", {
+        description: `Goes straight to ${chefName}'s team.`,
+      });
+      setContent("");
+      setChefId("");
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -324,7 +401,7 @@ function ThankYouForm({ chefs, foodieProfileId }: { chefs: Chef[]; foodieProfile
         disabled={busy || !chefId || content.trim().length === 0}
         className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
       >
-        Send
+        {busy ? "Sending…" : "Send"}
       </button>
     </form>
   );
