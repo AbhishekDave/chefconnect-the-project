@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "gen:types": "supabase gen types typescript --project-id zhagnxtnhavjnxohesfs --schema public > src/integrations/supabase/types.ts"
+    "gen:types": "supabase gen types typescript --project-id zhagnxtnhavjnxohesfs --schema public > src/lib/database.types.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
