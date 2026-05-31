@@ -2,7 +2,8 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
 import { HeartButton } from "@/components/HeartButton";
-import { getChefHeartTotal } from "@/lib/hearts";
+import { BackLink } from "@/components/BackLink";
+import { countHearts, getChefHeartTotal } from "@/lib/hearts";
 
 type Restaurant = {
   id: string;
@@ -107,14 +108,7 @@ function useVenueRollup(chefIds: string[]) {
 function DishHeartBadge({ dishId }: { dishId: string }) {
   const { data } = useQuery({
     queryKey: ["hearts-count", "dish", dishId],
-    queryFn: async () => {
-      const { count } = await supabase
-        .from("hearts")
-        .select("*", { count: "exact", head: true })
-        .eq("target_type", "dish")
-        .eq("target_id", dishId);
-      return count ?? 0;
-    },
+    queryFn: () => countHearts("dish", dishId),
   });
   return <span className="text-xs text-primary tabular-nums">♥ {data ?? 0}</span>;
 }
@@ -126,32 +120,65 @@ function RestaurantPage() {
   const venue = useVenueRollup(chefs.map((c) => c.id));
 
   return (
-    <main className="mx-auto max-w-2xl px-5 py-8">
-      <Link to="/" className="text-xs text-muted-foreground hover:text-foreground">← Home</Link>
-      <h1 className="mt-3 text-4xl">{restaurant.name}</h1>
-      <div className="mt-4 max-w-xs">
-        <HeartButton count={venue.data ?? 0} label="Love Meter" />
-      </div>
-      <p className="mt-2 text-xs text-muted-foreground">
-        Hearts come from diners at the table — sum of all chef and dish hearts.
-      </p>
+    <main className="mx-auto max-w-3xl px-5 py-6 pb-16 space-y-12">
+      <BackLink fallbackTo="/" />
 
-      <section className="mt-8">
-        <h2 className="mb-3 text-2xl">Kitchen crew</h2>
+      {/* Hero */}
+      <header className="space-y-5">
+        {restaurant.cover_image_url ? (
+          <div className="relative overflow-hidden rounded-2xl">
+            <img
+              src={restaurant.cover_image_url}
+              alt={restaurant.name}
+              className="aspect-[16/9] w-full object-cover"
+              loading="eager"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-background/60 via-background/10 to-transparent" />
+          </div>
+        ) : null}
+        <div>
+          <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Restaurant</div>
+          <h1 className="mt-2 font-serif text-5xl leading-[1.05]">{restaurant.name}</h1>
+        </div>
+      </header>
+
+      {/* Venue Love Meter */}
+      <section className="rounded-2xl border border-border bg-card p-6">
+        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Love Meter</div>
+        <div className="mt-2 flex items-baseline gap-3">
+          <span aria-hidden className="text-3xl text-primary">♥</span>
+          <span className="text-5xl text-primary tabular-nums font-serif">{venue.data ?? 0}</span>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          From diners at the table — sum of all chef and dish hearts.
+        </p>
+      </section>
+
+      {/* Crew */}
+      <section>
+        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Kitchen crew</div>
+        <h2 className="mt-2 mb-4 font-serif text-3xl">Who's cooking</h2>
         {chefs.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">No chefs listed yet.</p>
+          <p className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+            No chefs listed yet.
+          </p>
         ) : (
-          <ul className="space-y-2">
+          <ul className="space-y-3">
             {chefs.map((c) => (
               <li key={c.id}>
                 <Link
                   to="/chef/$chefId"
                   params={{ chefId: c.id }}
-                  className="flex items-center justify-between rounded-lg border border-border bg-card p-4 hover:border-primary"
+                  className="group flex items-center gap-4 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary"
                 >
-                  <span>
-                    <span className="text-card-foreground">{c.full_name}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">{c.crew_role}</span>
+                  <span className="grid size-12 shrink-0 place-items-center rounded-full bg-secondary font-serif text-lg text-secondary-foreground">
+                    {c.full_name.charAt(0)}
+                  </span>
+                  <span className="flex-1">
+                    <span className="block font-serif text-lg text-card-foreground">{c.full_name}</span>
+                    <span className="block text-xs uppercase tracking-wider text-muted-foreground">
+                      {c.crew_role}
+                    </span>
                   </span>
                   <ChefRollupBadge chefProfileId={c.id} />
                 </Link>
@@ -161,21 +188,31 @@ function RestaurantPage() {
         )}
       </section>
 
-      <section className="mt-8">
-        <h2 className="mb-3 text-2xl">Dishes</h2>
+      {/* Dishes */}
+      <section>
+        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">On the menu</div>
+        <h2 className="mt-2 mb-4 font-serif text-3xl">Signature dishes</h2>
         {dishes.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">No dishes listed yet.</p>
+          <p className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+            No dishes listed yet.
+          </p>
         ) : (
-          <ul className="space-y-2">
+          <ul className="grid gap-3 sm:grid-cols-2">
             {dishes.map((d) => (
-              <li key={d.id} className="flex items-center justify-between rounded-lg border border-border bg-card p-4">
-                <span className="text-card-foreground">{d.dish_name}</span>
+              <li
+                key={d.id}
+                className="flex items-center justify-between rounded-xl border border-border bg-card p-4"
+              >
+                <span className="font-serif text-base text-card-foreground">{d.dish_name}</span>
                 <DishHeartBadge dishId={d.id} />
               </li>
             ))}
           </ul>
         )}
       </section>
+
+      {/* Display-only HeartButton example removed; venue Love Meter card above is the source of truth. */}
+      <HeartButton count={venue.data ?? 0} label="Recognition received" className="hidden" />
     </main>
   );
 }
