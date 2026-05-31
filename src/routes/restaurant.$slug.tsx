@@ -3,6 +3,7 @@ import { queryOptions, useSuspenseQuery, useQuery, useQueryClient } from "@tanst
 import { supabase } from "@/lib/supabaseClient";
 import { useEffect } from "react";
 import { HeartButton } from "@/components/HeartButton";
+import { getChefHeartTotal } from "@/lib/hearts";
 
 type Restaurant = {
   id: string;
@@ -46,9 +47,25 @@ const restaurantQuery = (slug: string) =>
   });
 
 export const Route = createFileRoute("/restaurant/$slug")({
-  head: ({ params }) => ({
-    meta: [{ title: `${params.slug} — Cheftoman` }],
-  }),
+  head: ({ params, loaderData }) => {
+    const d = loaderData as { restaurant?: Restaurant } | undefined;
+    const name = d?.restaurant?.name ?? params.slug;
+    const title = `${name} — Cheftoman`;
+    const description =
+      d?.restaurant?.description?.slice(0, 155) ??
+      `${name} on Cheftoman — recognition for the kitchen team from diners at the table.`;
+    return {
+      meta: [
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        { property: "og:type", content: "website" },
+        { property: "og:url", content: `/restaurant/${params.slug}` },
+      ],
+      links: [{ rel: "canonical", href: `/restaurant/${params.slug}` }],
+    };
+  },
   loader: ({ context, params }) => context.queryClient.ensureQueryData(restaurantQuery(params.slug)),
   component: RestaurantPage,
   errorComponent: ({ error }) => <div className="p-6 text-sm text-destructive">{error.message}</div>,
@@ -83,6 +100,14 @@ function useLiveHeartCount(targetType: string, targetId: string) {
     };
   }, [targetType, targetId, qc]);
   return q.data ?? 0;
+}
+
+function ChefRollupBadge({ chefProfileId }: { chefProfileId: string }) {
+  const { data } = useQuery({
+    queryKey: ["chef-rollup", chefProfileId],
+    queryFn: () => getChefHeartTotal(chefProfileId),
+  });
+  return <span className="text-xs text-primary tabular-nums">♥ {data ?? 0}</span>;
 }
 
 function HeartBadge({ targetType, targetId }: { targetType: string; targetId: string }) {
@@ -123,7 +148,7 @@ function RestaurantPage() {
                     <span className="text-card-foreground">{c.full_name}</span>
                     <span className="ml-2 text-xs text-muted-foreground">{c.crew_role}</span>
                   </span>
-                  <HeartBadge targetType="chef_profile" targetId={c.id!} />
+                  <ChefRollupBadge chefProfileId={c.id!} />
                 </Link>
               </li>
             ))}

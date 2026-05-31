@@ -3,10 +3,16 @@ import { useState } from "react";
 import { StickyWhatsApp } from "@/components/marketing/StickyWhatsApp";
 import { ScrollPopup } from "@/components/marketing/ScrollPopup";
 
-const WA_NUMBER = "__WA_NUMBER__"; // TODO: replace with real international number, no + or spaces
+const WA_NUMBER = "4915123702524";
+// TODO: swap to info@cheftoman.com when domain email is live
+const EMAIL_FALLBACK = "cheftoman_official@outlook.com";
 
 function buildWaUrl(message: string) {
   return `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(message)}`;
+}
+
+function buildMailto(subject: string, body: string) {
+  return `mailto:${EMAIL_FALLBACK}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 const HERO_MSG =
@@ -31,6 +37,26 @@ export const Route = createFileRoute("/")({
         property: "og:description",
         content:
           "Seated diners tap a heart and write a note. It goes straight to the kitchen team. Free pilot for restaurants.",
+      },
+      { property: "og:type", content: "website" },
+      { property: "og:url", content: "/" },
+    ],
+    links: [{ rel: "canonical", href: "/" }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          name: "Cheftoman",
+          description:
+            "Presence-verified diner recognition that goes straight to the kitchen team.",
+          contactPoint: {
+            "@type": "ContactPoint",
+            contactType: "sales",
+            url: `https://wa.me/${WA_NUMBER}`,
+          },
+        }),
       },
     ],
   }),
@@ -282,6 +308,18 @@ function FreePilot() {
             Or leave your details
           </a>
         </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          No WhatsApp?{" "}
+          <a
+            href={buildMailto(
+              "Free sample stand — Cheftoman",
+              "Hi Cheftoman — I'd like a free sample stand for my restaurant. Please send details.",
+            )}
+            className="underline hover:text-foreground"
+          >
+            Email us at {EMAIL_FALLBACK}
+          </a>
+        </p>
       </div>
     </section>
   );
@@ -365,6 +403,18 @@ function LeadForm() {
           >
             Send via WhatsApp
           </button>
+          <p className="text-center text-xs text-muted-foreground">
+            No WhatsApp?{" "}
+            <a
+              href={buildMailto(
+                "Free sample stand — Cheftoman",
+                `Hi Cheftoman — I'd like a free sample stand.\n\nName: ${name}\nRestaurant: ${restaurant}\nCity: ${city}\nWhatsApp: ${phone}`,
+              )}
+              className="underline hover:text-foreground"
+            >
+              Email us instead
+            </a>
+          </p>
         </form>
       </div>
     </section>
