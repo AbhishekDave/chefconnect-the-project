@@ -308,6 +308,18 @@ function FreePilot() {
             Or leave your details
           </a>
         </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          No WhatsApp?{" "}
+          <a
+            href={buildMailto(
+              "Free sample stand — Cheftoman",
+              "Hi Cheftoman — I'd like a free sample stand for my restaurant. Please send details.",
+            )}
+            className="underline hover:text-foreground"
+          >
+            Email us at {EMAIL_FALLBACK}
+          </a>
+        </p>
       </div>
     </section>
   );
