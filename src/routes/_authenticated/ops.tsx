@@ -149,11 +149,23 @@ function RestaurantOps({ restaurantId, chefProfileIds }: { restaurantId: string;
 
   const heartList = hearts.data ?? [];
   const total = heartList.length;
-  const perChef = (meta.data?.chefs ?? [])
-    .map((c) => ({ ...c, n: heartList.filter((h) => h.target_type === "chef_profile" && h.target_id === c.id).length }))
-    .sort((a, b) => b.n - a.n);
   const perDish = (meta.data?.dishes ?? [])
     .map((d) => ({ ...d, n: heartList.filter((h) => h.target_type === "dish" && h.target_id === d.id).length }))
+    .sort((a, b) => b.n - a.n);
+  // Per-chef rollup: hearts on chef_profile PLUS hearts on dishes assigned to that chef's crew rows
+  const perChef = (meta.data?.chefs ?? [])
+    .map((c) => {
+      const directHearts = heartList.filter(
+        (h) => h.target_type === "chef_profile" && h.target_id === c.id,
+      ).length;
+      const chefDishIds = (meta.data?.dishes ?? [])
+        .filter((d) => d.assigned_crew_id === c.crewId)
+        .map((d) => d.id);
+      const dishHearts = heartList.filter(
+        (h) => h.target_type === "dish" && chefDishIds.includes(h.target_id),
+      ).length;
+      return { ...c, n: directHearts + dishHearts };
+    })
     .sort((a, b) => b.n - a.n);
 
   return (
