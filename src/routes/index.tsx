@@ -403,6 +403,18 @@ function LeadForm() {
           >
             Send via WhatsApp
           </button>
+          <p className="text-center text-xs text-muted-foreground">
+            No WhatsApp?{" "}
+            <a
+              href={buildMailto(
+                "Free sample stand — Cheftoman",
+                `Hi Cheftoman — I'd like a free sample stand.\n\nName: ${name}\nRestaurant: ${restaurant}\nCity: ${city}\nWhatsApp: ${phone}`,
+              )}
+              className="underline hover:text-foreground"
+            >
+              Email us instead
+            </a>
+          </p>
         </form>
       </div>
     </section>
