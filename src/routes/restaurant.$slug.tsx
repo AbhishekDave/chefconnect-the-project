@@ -3,6 +3,7 @@ import { queryOptions, useSuspenseQuery, useQuery, useQueryClient } from "@tanst
 import { supabase } from "@/lib/supabaseClient";
 import { useEffect } from "react";
 import { HeartButton } from "@/components/HeartButton";
+import { getChefHeartTotal } from "@/lib/hearts";
 
 type Restaurant = {
   id: string;
