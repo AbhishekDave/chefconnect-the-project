@@ -1,61 +1,58 @@
-# Marketing Landing Page — `/` (index)
+## Part 1 — Landing page wiring (items 1-3)
 
-Replace the current restaurant-list `/` with a static, mobile-first marketing page aimed at restaurant owners. Diner flow (`/table/$tableId`) is untouched and never lands here. No Supabase calls, no auth, no backend.
+**`src/routes/index.tsx`**
+- Replace `__WA_NUMBER__` with `4915123702524` (single `WA_NUMBER` const, used by `buildWaUrl()` and `StickyWhatsApp`).
+- Add `EMAIL_FALLBACK = "cheftoman_official@outlook.com"` const, with `// TODO: swap to info@cheftoman.com when domain email is live`.
+- Under the lead-form primary CTA ("Send via WhatsApp"), add a small secondary line: "No WhatsApp? Email us" → `mailto:` link populated with the same name/restaurant/city fields (subject + body prefilled).
+- Same email fallback link under the "Request a free sample stand" CTA in the FreePilot section.
+- City stays a free-text `<input>` (no change).
 
-## Scope
+**`src/components/marketing/StickyWhatsApp.tsx`** — no change.
 
-- Rewrite `src/routes/index.tsx` only.
-- Add 2 small presentational components under `src/components/marketing/`.
-- Reuse existing brand tokens in `src/styles.css` (charcoal + ember + cream, Instrument Serif headings, Inter body). No new tokens, no new deps.
-- No changes to `__root.tsx`, navbar, or any other route. (Navbar already hides on public marketing context per existing layout; if it shows, we'll let it — out of scope to retheme nav.)
+## Part 2 — Dish-to-cook recognition (READ-TIME ROLLUP only)
 
-## Open items needing user input before implementation
+No schema changes. No new tables. No new columns. Heart insert on `/table/$tableId` stays exactly as-is (`target_type='dish'`, `target_id = dish.id`; or `target_type='chef_profile'`, `target_id = chef.id`).
 
-1. **WhatsApp number** for `wa.me/<NUMBER>` links and the sticky button. Need the full international number (no `+`, no spaces).
-2. **Sample-stand fallback email** — when the lead form "sends an email", which address? (Or should the lead form ALSO just open WhatsApp prefilled, and we skip mailto entirely?)
-3. **City** field — free text, or a small preset list?
+Add a single helper `getChefHeartTotal(chefProfileId)` in `src/lib/crew.ts` (or new `src/lib/hearts.ts`) that computes:
 
-I'll proceed assuming: WhatsApp number = placeholder `__WA_NUMBER__` (easy to swap), lead form opens WhatsApp prefilled (no mailto), city is free text. Tell me if any of that should change.
+1. Fetch dish ids for the chef:
+   `signature_dishes` where `assigned_crew_id` ∈ `restaurant_crew.id` whose `chef_profile_id = chefProfileId`.
+   (Two queries: `restaurant_crew` rows for this chef → their `id`s → `signature_dishes` where `assigned_crew_id IN (...)`.)
+2. Count hearts where `(target_type='chef_profile' AND target_id = chefProfileId)` OR `(target_type='dish' AND target_id IN dishIds)`.
+3. Return the sum.
 
-## Page structure (in order)
+Wire this rollup into the read sites:
+- `src/routes/chef.$chefId.tsx` — show the rollup instead of (or in addition to) `chef_profiles.total_hearts`. Display-only HeartButton uses the rollup count.
+- `src/routes/_authenticated/me.tsx` — same rollup for the signed-in cook.
+- `src/routes/_authenticated/ops.tsx` — per-cook recognition column uses the rollup.
+- `src/routes/restaurant.$slug.tsx` — if it lists chefs with hearts, use the rollup per chef.
 
-1. **Hero** — H1 + subhead + primary WhatsApp CTA + secondary "Request a free sample stand" (scrolls to lead form). Charcoal bg, ember accent, cream type.
-2. **What we solve** — 4 cards (grid: 1 col mobile, 2 cols sm, 4 cols lg). Pain points in diner→kitchen recognition gap.
-3. **How it works** — 3 numbered steps (tap NFC / send heart + note / kitchen sees it live).
-4. **Presence-verified difference** — explainer block: why hearts come from real seated diners (NFC + QR at the table), not from anonymous internet reviews. No mention of blocking Google reviews.
-5. **For your kitchen** — benefit list aimed at chefs/owners (morale, retention, signature-dish signal).
-6. **Free pilot offer** — what's included, zero cost, no lock-in. Primary CTA: WhatsApp. Secondary: lead form anchor.
-7. **Lead form** — minimal: name, restaurant, city, WhatsApp number. Submit builds a `wa.me/<NUMBER>?text=...` URL with the four fields prefilled and opens it in a new tab. Pure client-side, no fetch.
-8. **Final CTA** — single big WhatsApp button + one-line reassurance.
-9. **Footer** — minimal: brand, year, link to `/auth` for existing owners.
+Public-page HeartButton stays display-only. Table-page heart flow is untouched.
 
-## Always-on UI
+Multi-cook per dish (a real `dish_crew` join) is Phase 2, not now.
 
-- **Sticky WhatsApp FAB** — fixed bottom-right, ember bg, visible on every section, `aria-label="Chat on WhatsApp"`. Hidden on `/table/*` and `/auth` because it only lives inside `index.tsx` (not the root).
-- **Scroll-triggered popup** — appears once after the user scrolls past the "How it works" section (IntersectionObserver on a sentinel below that section). Value-first copy: "Want a free sample stand for your tables?" with WhatsApp CTA + dismiss. Never time-triggered. Dismissal persisted in `sessionStorage` so it doesn't reappear that session.
+## Part 3 — Read-only portfolio polish (items 5-6)
 
-## Files to add / change
+Visual-only pass, no query shape changes beyond swapping in the rollup helper above:
 
-- **edit** `src/routes/index.tsx` — replace `Landing` + `RestaurantList` + `featuredQuery` with the marketing page. Keep `head()` SEO with updated title/description for owners.
-- **add** `src/components/marketing/StickyWhatsApp.tsx` — sticky FAB.
-- **add** `src/components/marketing/ScrollPopup.tsx` — IntersectionObserver popup, sessionStorage gated.
-- (Lead form lives inline in `index.tsx` — small enough not to warrant its own file.)
+- `src/routes/chef.$chefId.tsx`: typography hierarchy (Instrument Serif display, Inter body), spacing rhythm, hero with rollup hearts + tier badge, signature dishes grid using `dish_name`, bio block, specialties as chips.
+- `src/routes/restaurant.$slug.tsx`: hero, chef roster cards (link to `/chef/$chefId`), signature dishes from the restaurant's chefs.
+- Semantic tokens only (charcoal/ember/cream from `src/styles.css`). No literal hex.
 
-## Technical notes
+## Part 4 — Preview & SEO checks (items 7-8)
 
-- Single shared helper `buildWaUrl(message: string)` defined in `index.tsx` returns `https://wa.me/${NUMBER}?text=${encodeURIComponent(message)}`.
-- All CTAs are `<a href target="_blank" rel="noopener noreferrer">`, not buttons, so they work without JS.
-- Lead form is a controlled `<form onSubmit>` that calls `window.open(buildWaUrl(...))` and `preventDefault`s. No network calls.
-- Uses semantic tokens (`bg-background`, `bg-card`, `text-foreground`, `text-primary`, `bg-primary`, `border-border`, etc.) — no literal hex.
-- One H1 only (in hero). Section headings are H2. SEO `head()` updated: title ≈ "Cheftoman — Real love from real diners, straight to your kitchen", description ≈ 150 chars for restaurant owners.
-- Mobile-first: base styles target ~375px; `sm:` and `lg:` widen the grids.
-- No framer-motion needed; CSS transitions only (keeps bundle small, no new deps).
-- Removes the now-unused `featuredQuery` and the `useSuspenseQuery` import from this file. The `restaurants` table query disappears from `/`; nothing else in the app depends on it.
+- Load `/` in the preview, check console for unresolved imports / route-tree warnings, screenshot at 1336×853 and ~390px mobile.
+- Add leaf-level `head()` to `src/routes/index.tsx`:
+  - `title`, `description`, `og:title`, `og:description`, `og:url` (relative `/`), `og:type: "website"`.
+  - Canonical `<link rel="canonical" href="/">` (leaf only).
+  - JSON-LD `Organization` block (name: Cheftoman, contact: WhatsApp URL).
+- `og:image`: skip this pass (no asset), flag as follow-up.
+- Confirm `/chef/$chefId` and `/restaurant/$slug` have leaf `head()` with unique title/description from loader data; add if missing.
 
-## Out of scope (explicitly)
-
-- Any backend, lead persistence, email sending, or analytics.
-- Navbar/footer restructure across other routes.
-- Changes to `/table/$tableId`, `/restaurant/$slug`, `/chef/$chefId`, `/me`, `/ops`, `/auth`.
-- New brand tokens or font additions (using only what's already in `src/styles.css`).
-- Any "block your Google reviews" framing — copy stays positive ("verified, kitchen-direct appreciation").
+## Out of scope
+- No Supabase schema changes; no `dish_cooks`, no `target_chef_id`, no per-cook fan-out.
+- No `chefmojis` work (Phase 6 locked).
+- No scanner UI/route.
+- No backend for the lead form (WhatsApp + mailto only).
+- No points/karma/badge copy.
+- No public-page heart inserts.
