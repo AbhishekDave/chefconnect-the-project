@@ -148,7 +148,7 @@ function RestaurantPage() {
                     <span className="text-card-foreground">{c.full_name}</span>
                     <span className="ml-2 text-xs text-muted-foreground">{c.crew_role}</span>
                   </span>
-                  <HeartBadge targetType="chef_profile" targetId={c.id!} />
+                  <ChefRollupBadge chefProfileId={c.id!} />
                 </Link>
               </li>
             ))}
