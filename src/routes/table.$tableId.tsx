@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { z } from "zod";
 import { zodValidator } from "@tanstack/zod-adapter";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -167,6 +167,10 @@ function HeartRow({
   // Optimistic lock: flips true the instant the diner taps, before the insert
   // resolves. Rolled back to false on insert failure.
   const [optimisticHearted, setOptimisticHearted] = useState(false);
+  // In-flight guard: blocks a second tap from racing past the `hearted` check
+  // while the first insert is still awaiting a response. Phase 2 adds a DB
+  // unique constraint to make this defense-in-depth.
+  const inFlightRef = useRef(false);
   const hearted = !!myHeart || optimisticHearted;
 
   useEffect(() => {
@@ -178,6 +182,10 @@ function HeartRow({
         () => {
           qc.invalidateQueries({ queryKey: countKey });
           qc.invalidateQueries({ queryKey: heartedKey });
+          // Public chef/venue pages compute rollups off the same hearts rows;
+          // keep their cached totals in sync with the table-page realtime feed.
+          qc.invalidateQueries({ queryKey: ["chef-rollup"] });
+          qc.invalidateQueries({ queryKey: ["venue-rollup"] });
         },
       )
       .subscribe();
@@ -190,25 +198,32 @@ function HeartRow({
   async function tap() {
     // Give-once, permanent. No un-heart. DB-level uniqueness is Phase 2:
     // unique(target_type, target_id, coalesce(from_user_id::text, anonymous_session_token)).
-    if (hearted) return;
+    if (hearted || inFlightRef.current) return;
+    inFlightRef.current = true;
     setOptimisticHearted(true);
     const token = getOrCreateAnonymousSessionToken();
-    const { error } = await supabase.from("hearts").insert({
-      target_type: targetType,
-      target_id: targetId,
-      anonymous_session_token: token,
-      from_user_id: user?.id ?? null,
-      // Reuse is_gps_verified as presence proof: NFC tap = at the table.
-      is_gps_verified: entryMethod === "nfc",
-    });
-    if (error) {
-      setOptimisticHearted(false);
-      toast.error(error.message);
-      return;
+    try {
+      const { error } = await supabase.from("hearts").insert({
+        target_type: targetType,
+        target_id: targetId,
+        anonymous_session_token: token,
+        from_user_id: user?.id ?? null,
+        // Reuse is_gps_verified as presence proof: NFC tap = at the table.
+        is_gps_verified: entryMethod === "nfc",
+      });
+      if (error) {
+        setOptimisticHearted(false);
+        toast.error(error.message);
+        return;
+      }
+      if (!user) bumpNudgeCount();
+      qc.invalidateQueries({ queryKey: countKey });
+      qc.invalidateQueries({ queryKey: heartedKey });
+      qc.invalidateQueries({ queryKey: ["chef-rollup"] });
+      qc.invalidateQueries({ queryKey: ["venue-rollup"] });
+    } finally {
+      inFlightRef.current = false;
     }
-    if (!user) bumpNudgeCount();
-    qc.invalidateQueries({ queryKey: countKey });
-    qc.invalidateQueries({ queryKey: heartedKey });
   }
 
   return (
@@ -266,7 +281,7 @@ function TablePage() {
   const nudge = !user ? getNudgeCount() : 0;
 
   return (
-    <main className="mx-auto max-w-md px-5 py-6 pb-32">
+    <main className={`mx-auto max-w-md px-5 py-6 ${!user && nudge > 0 ? "pb-40" : "pb-32"}`}>
       <div className="text-xs uppercase tracking-wider text-muted-foreground">
         Table {table.table_number ?? ""}{" "}
         {src === "nfc" && (
@@ -344,7 +359,7 @@ function ThankYouForm({ chefs, foodieProfileId }: { chefs: Chef[]; foodieProfile
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
-    if (!chefId || content.trim().length < 1 || content.length > 500) return;
+    if (!chefId || content.trim().length < 3 || content.length > 500) return;
     setBusy(true);
     try {
       const token = getOrCreateAnonymousSessionToken();
@@ -396,7 +411,7 @@ function ThankYouForm({ chefs, foodieProfileId }: { chefs: Chef[]; foodieProfile
       </div>
       <button
         type="submit"
-        disabled={busy || !chefId || content.trim().length === 0}
+        disabled={busy || !chefId || content.trim().length < 3}
         className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
       >
         {busy ? "Sending…" : "Send"}
