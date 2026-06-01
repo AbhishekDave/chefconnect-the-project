@@ -123,12 +123,30 @@ function RestaurantOps({ restaurantId }: { restaurantId: string }) {
     };
   }, [restaurantId, qc]);
 
+  // Server-side scope: pull this venue's table ids first, then filter
+  // table_connections by `.in('table_id', tableIds)`. Stops other venues'
+  // connections from ever entering the result set.
+  const tableIdsQ = useQuery({
+    queryKey: ["ops-table-ids", restaurantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("restaurant_tables")
+        .select("id")
+        .eq("restaurant_id", restaurantId);
+      if (error) throw error;
+      return ((data ?? []) as { id: string }[]).map((r) => r.id);
+    },
+  });
+  const tableIds = tableIdsQ.data ?? [];
+
   const conns = useQuery({
-    queryKey: ["ops-conns", restaurantId],
+    queryKey: ["ops-conns", restaurantId, tableIds.join(",")],
+    enabled: tableIds.length > 0,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("table_connections")
-        .select("id, entry_method, is_verified_presence, created_at, table_id, restaurant_tables:table_id(table_number, restaurant_id)")
+        .select("id, entry_method, is_verified_presence, created_at, table_id, restaurant_tables:table_id(table_number)")
+        .in("table_id", tableIds)
         .order("created_at", { ascending: false })
         .limit(30);
       if (error) throw error;
@@ -138,8 +156,8 @@ function RestaurantOps({ restaurantId }: { restaurantId: string }) {
         is_verified_presence: boolean | null;
         created_at: string;
         table_id: string;
-        restaurant_tables: { table_number: string | number | null; restaurant_id: string } | null;
-      }> ?? []).filter((c) => c.restaurant_tables?.restaurant_id === restaurantId);
+        restaurant_tables: { table_number: string | number | null } | null;
+      }>) ?? [];
     },
   });
 
@@ -175,8 +193,8 @@ function RestaurantOps({ restaurantId }: { restaurantId: string }) {
   }, [restaurantId, qc]);
 
   const heartList = hearts.data ?? [];
-  // Total = chef-target + dish-target hearts only (no phantom restaurant target).
-  const total = heartList.length;
+  // null while loading so we render an em-dash instead of a misleading "0".
+  const total: number | null = hearts.isLoading || !hearts.data ? null : heartList.length;
   const perDish = (meta.data?.dishes ?? [])
     .map((d) => ({ ...d, n: heartList.filter((h) => h.target_type === "dish" && h.target_id === d.id).length }))
     .sort((a, b) => b.n - a.n);
@@ -200,7 +218,9 @@ function RestaurantOps({ restaurantId }: { restaurantId: string }) {
       <h2 className="text-xl">{meta.data?.restaurant?.name ?? "Restaurant"}</h2>
       <div className="mt-3 rounded-lg border border-border bg-card p-5">
         <div className="text-xs uppercase tracking-wider text-muted-foreground">Hearts received</div>
-        <div className="mt-1 text-5xl text-primary tabular-nums">{total}</div>
+        <div className="mt-1 text-5xl text-primary tabular-nums">
+          {total === null ? <span className="text-muted-foreground">—</span> : total}
+        </div>
         <p className="mt-1 text-xs text-muted-foreground">
           Chef hearts + dish hearts. No phantom restaurant target.
         </p>
