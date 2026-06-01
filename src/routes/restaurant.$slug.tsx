@@ -14,6 +14,26 @@ type Restaurant = {
 
 type Chef = { id: string; full_name: string; crew_role: string };
 
+type Dish = {
+  id: string;
+  dish_name: string;
+  description: string | null;
+  image_url: string | null;
+  dietary_type: string | null;
+  is_vegetarian: boolean | null;
+  is_vegan: boolean | null;
+  is_gluten_free: boolean | null;
+};
+
+/** Pick the strongest dietary signal we have. Vegan > vegetarian > GF > raw dietary_type. */
+function dietaryTag(d: Dish): string | null {
+  if (d.is_vegan) return "Vegan";
+  if (d.is_vegetarian) return "Vegetarian";
+  if (d.is_gluten_free) return "Gluten-free";
+  if (d.dietary_type && d.dietary_type !== "non-veg") return d.dietary_type;
+  return null;
+}
+
 const restaurantQuery = (slug: string) =>
   queryOptions({
     queryKey: ["restaurant", slug],
@@ -29,7 +49,7 @@ const restaurantQuery = (slug: string) =>
       const [{ data: dishes }, { data: crew }] = await Promise.all([
         supabase
           .from("signature_dishes")
-          .select("id, dish_name")
+          .select("id, dish_name, description, image_url, dietary_type, is_vegetarian, is_vegan, is_gluten_free")
           .eq("restaurant_id", r.id)
           .eq("is_active", true)
           .order("dish_name"),
@@ -55,7 +75,7 @@ const restaurantQuery = (slug: string) =>
 
       return {
         restaurant: r as Restaurant,
-        dishes: (dishes ?? []) as { id: string; dish_name: string }[],
+        dishes: (dishes ?? []) as Dish[],
         chefs,
       };
     },
@@ -85,12 +105,21 @@ export const Route = createFileRoute("/restaurant/$slug")({
   notFoundComponent: () => <div className="p-6">Restaurant not found.</div>,
 });
 
+function HeartCount({ value }: { value: number | null | undefined }) {
+  // While loading the underlying query, render an em-dash instead of "0".
+  // 0 must only ever appear when the real total is genuinely zero.
+  if (value === null || value === undefined) {
+    return <span className="text-xs text-muted-foreground tabular-nums">♥ —</span>;
+  }
+  return <span className="text-xs text-primary tabular-nums">♥ {value}</span>;
+}
+
 function ChefRollupBadge({ chefProfileId }: { chefProfileId: string }) {
   const { data } = useQuery({
     queryKey: ["chef-rollup", chefProfileId],
     queryFn: () => getChefHeartTotal(chefProfileId),
   });
-  return <span className="text-xs text-primary tabular-nums">♥ {data ?? 0}</span>;
+  return <HeartCount value={data ?? null} />;
 }
 
 function useVenueRollup(chefIds: string[]) {
@@ -110,7 +139,7 @@ function DishHeartBadge({ dishId }: { dishId: string }) {
     queryKey: ["hearts-count", "dish", dishId],
     queryFn: () => countHearts("dish", dishId),
   });
-  return <span className="text-xs text-primary tabular-nums">♥ {data ?? 0}</span>;
+  return <HeartCount value={data ?? null} />;
 }
 
 function RestaurantPage() {
@@ -118,6 +147,7 @@ function RestaurantPage() {
   const { data } = useSuspenseQuery(restaurantQuery(slug));
   const { restaurant, dishes, chefs } = data;
   const venue = useVenueRollup(chefs.map((c) => c.id));
+  const venueTotal: number | null = venue.isLoading ? null : venue.data ?? 0;
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-6 pb-16 space-y-12">
@@ -147,7 +177,9 @@ function RestaurantPage() {
         <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Love Meter</div>
         <div className="mt-2 flex items-baseline gap-3">
           <span aria-hidden className="text-3xl text-primary">♥</span>
-          <span className="text-5xl text-primary tabular-nums font-serif">{venue.data ?? 0}</span>
+          <span className="text-5xl text-primary tabular-nums font-serif">
+            {venueTotal === null ? <span className="text-muted-foreground">—</span> : venueTotal}
+          </span>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
           From diners at the table — sum of all chef and dish hearts.
@@ -198,15 +230,42 @@ function RestaurantPage() {
           </p>
         ) : (
           <ul className="grid gap-3 sm:grid-cols-2">
-            {dishes.map((d) => (
-              <li
-                key={d.id}
-                className="flex items-center justify-between rounded-xl border border-border bg-card p-4"
-              >
-                <span className="font-serif text-base text-card-foreground">{d.dish_name}</span>
-                <DishHeartBadge dishId={d.id} />
-              </li>
-            ))}
+            {dishes.map((d) => {
+              const tag = dietaryTag(d);
+              return (
+                <li
+                  key={d.id}
+                  className="flex gap-3 rounded-xl border border-border bg-card p-3"
+                >
+                  {d.image_url ? (
+                    <img
+                      src={d.image_url}
+                      alt={d.dish_name}
+                      className="size-20 shrink-0 rounded-lg object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="grid size-20 shrink-0 place-items-center rounded-lg bg-secondary font-serif text-2xl text-secondary-foreground">
+                      {d.dish_name.charAt(0)}
+                    </div>
+                  )}
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-serif text-base text-card-foreground">{d.dish_name}</span>
+                      <DishHeartBadge dishId={d.id} />
+                    </div>
+                    {tag && (
+                      <span className="mt-1 inline-flex w-fit rounded-full bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-primary">
+                        {tag}
+                      </span>
+                    )}
+                    {d.description && (
+                      <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">{d.description}</p>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

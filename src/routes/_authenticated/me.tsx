@@ -8,7 +8,12 @@ export const Route = createFileRoute("/_authenticated/me")({
   component: MePage,
 });
 
-function useCount(queryKey: unknown[], table: string, filterCol: string, filterVal: string | null) {
+/**
+ * Returns the live row count, or `null` while loading / when the filter value
+ * isn't ready yet. Callers render `—` for `null` so we never flash a
+ * misleading "0" when the real total is unknown.
+ */
+function useCount(queryKey: unknown[], table: string, filterCol: string, filterVal: string | null): number | null {
   const qc = useQueryClient();
   const q = useQuery({
     queryKey,
@@ -36,7 +41,7 @@ function useCount(queryKey: unknown[], table: string, filterCol: string, filterV
       void supabase.removeChannel(ch);
     };
   }, [table, filterCol, filterVal, qc]);
-  return q.data ?? 0;
+  return q.data ?? null;
 }
 
 function MePage() {
@@ -76,11 +81,13 @@ function MePage() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({ label, value }: { label: string; value: number | null }) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
       <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="mt-1 text-3xl text-primary tabular-nums">{value}</div>
+      <div className="mt-1 text-3xl text-primary tabular-nums">
+        {value === null ? <span className="text-muted-foreground">—</span> : value}
+      </div>
     </div>
   );
 }
@@ -89,10 +96,12 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">{children}</p>;
 }
 
+type HeartRow = { id: string; target_type: string; target_id: string; created_at: string };
+
 function HeartsList({ userId }: { userId: string }) {
-  const { data, isLoading } = useQuery({
+  const { data: hearts, isLoading } = useQuery({
     queryKey: ["me-hearts-list", userId],
-    queryFn: async () => {
+    queryFn: async (): Promise<HeartRow[]> => {
       const { data, error } = await supabase
         .from("hearts")
         .select("id, target_type, target_id, created_at")
@@ -100,18 +109,58 @@ function HeartsList({ userId }: { userId: string }) {
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as HeartRow[];
     },
   });
+
+  const chefIds = (hearts ?? []).filter((h) => h.target_type === "chef_profile").map((h) => h.target_id);
+  const dishIds = (hearts ?? []).filter((h) => h.target_type === "dish").map((h) => h.target_id);
+
+  // Resolve display names: chefs come from users.full_name via chef_profiles
+  // (chef_profiles has no name column). Dishes come straight from
+  // signature_dishes.dish_name.
+  const { data: nameMap } = useQuery({
+    queryKey: ["me-hearts-names", chefIds.join(","), dishIds.join(",")],
+    enabled: !!hearts && hearts.length > 0,
+    queryFn: async () => {
+      const map: Record<string, string> = {};
+      if (chefIds.length > 0) {
+        const { data, error } = await supabase
+          .from("chef_profiles")
+          .select("id, users:user_id(full_name)")
+          .in("id", chefIds);
+        if (error) throw error;
+        ((data ?? []) as unknown as Array<{ id: string; users: { full_name: string | null } | null }>).forEach((r) => {
+          map[r.id] = r.users?.full_name?.trim() || `Chef ${r.id.slice(0, 6)}`;
+        });
+      }
+      if (dishIds.length > 0) {
+        const { data, error } = await supabase
+          .from("signature_dishes")
+          .select("id, dish_name")
+          .in("id", dishIds);
+        if (error) throw error;
+        ((data ?? []) as Array<{ id: string; dish_name: string }>).forEach((r) => {
+          map[r.id] = r.dish_name;
+        });
+      }
+      return map;
+    },
+  });
+
   if (isLoading) return <Empty>Loading…</Empty>;
-  if (!data?.length) return <Empty>No hearts given yet.</Empty>;
+  if (!hearts?.length) return <Empty>No hearts given yet.</Empty>;
   return (
     <ul className="space-y-2">
-      {data.map((h) => (
-        <li key={h.id} className="rounded-lg border border-border bg-card p-3 text-sm text-card-foreground">
-          ♥ {h.target_type} <span className="text-muted-foreground">· {new Date(h.created_at).toLocaleString()}</span>
-        </li>
-      ))}
+      {hearts.map((h) => {
+        const name = nameMap?.[h.target_id] ?? `${h.target_type === "dish" ? "Dish" : "Chef"} ${h.target_id.slice(0, 6)}`;
+        return (
+          <li key={h.id} className="rounded-lg border border-border bg-card p-3 text-sm text-card-foreground">
+            <span className="text-primary">♥</span> {name}{" "}
+            <span className="text-muted-foreground">· {new Date(h.created_at).toLocaleString()}</span>
+          </li>
+        );
+      })}
     </ul>
   );
 }

@@ -21,6 +21,26 @@ type ChefRow = {
 
 type PrimaryRestaurant = { slug: string; name: string } | null;
 
+type Dish = {
+  id: string;
+  dish_name: string;
+  description: string | null;
+  image_url: string | null;
+  dietary_type: string | null;
+  is_vegetarian: boolean | null;
+  is_vegan: boolean | null;
+  is_gluten_free: boolean | null;
+};
+
+function dietaryTag(d: Dish): string | null {
+  if (d.is_vegan) return "Vegan";
+  if (d.is_vegetarian) return "Vegetarian";
+  if (d.is_gluten_free) return "Gluten-free";
+  if (d.dietary_type && d.dietary_type !== "non-veg") return d.dietary_type;
+  return null;
+}
+
+
 const chefQuery = (chefId: string) =>
   queryOptions({
     queryKey: ["chef", chefId],
@@ -54,16 +74,16 @@ const chefQuery = (chefId: string) =>
       const primaryRestaurant: PrimaryRestaurant =
         crew.find((r) => r.restaurants)?.restaurants ?? null;
 
-      let dishes: { id: string; dish_name: string }[] = [];
+      let dishes: Dish[] = [];
       let dishIds: string[] = [];
       if (crewIds.length > 0) {
         const { data } = await supabase
           .from("signature_dishes")
-          .select("id, dish_name")
+          .select("id, dish_name, description, image_url, dietary_type, is_vegetarian, is_vegan, is_gluten_free")
           .in("assigned_crew_id", crewIds)
           .eq("is_active", true)
           .order("dish_name");
-        dishes = (data ?? []) as { id: string; dish_name: string }[];
+        dishes = (data ?? []) as Dish[];
         dishIds = dishes.map((d) => d.id);
       }
 
@@ -196,14 +216,39 @@ function ChefPage() {
           </p>
         ) : (
           <ul className="grid gap-3 sm:grid-cols-2">
-            {dishes.map((d) => (
-              <li
-                key={d.id}
-                className="rounded-xl border border-border bg-card p-4 font-serif text-base text-card-foreground"
-              >
-                {d.dish_name}
-              </li>
-            ))}
+            {dishes.map((d) => {
+              const tag = dietaryTag(d);
+              return (
+                <li
+                  key={d.id}
+                  className="flex gap-3 rounded-xl border border-border bg-card p-3"
+                >
+                  {d.image_url ? (
+                    <img
+                      src={d.image_url}
+                      alt={d.dish_name}
+                      className="size-20 shrink-0 rounded-lg object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="grid size-20 shrink-0 place-items-center rounded-lg bg-secondary font-serif text-2xl text-secondary-foreground">
+                      {d.dish_name.charAt(0)}
+                    </div>
+                  )}
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="font-serif text-base text-card-foreground">{d.dish_name}</span>
+                    {tag && (
+                      <span className="mt-1 inline-flex w-fit rounded-full bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-primary">
+                        {tag}
+                      </span>
+                    )}
+                    {d.description && (
+                      <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">{d.description}</p>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

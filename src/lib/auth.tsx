@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabaseClient";
-import { getAnonymousSessionToken } from "./anonymousSession";
+import { getAnonymousSessionToken, resetNudgeCount } from "./anonymousSession";
 import { toast } from "sonner";
 
 type AuthState = {
@@ -93,6 +93,9 @@ async function reconcileIdentity(user: User): Promise<string | null> {
     if (sErr) {
       throw new Error(`stitch_anonymous_session failed: ${sErr.message}`);
     }
+    // Successful stitch: signup nudge counter has done its job, clear it so
+    // the diner doesn't see a stale prompt on the next anonymous visit.
+    resetNudgeCount();
 
     // Dev-only sanity check: confirm at least one of the three anon-keyed
     // tables actually received the stitch. If all three are zero after a
