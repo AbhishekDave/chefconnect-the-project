@@ -113,6 +113,11 @@ export type Database = {
           image_url: string | null;
           hearts_count: number | null;
           is_active: boolean | null;
+          dietary_type: string | null;
+          is_vegetarian: boolean | null;
+          is_vegan: boolean | null;
+          is_gluten_free: boolean | null;
+          contains_allergens: string[] | null;
           created_at: string;
           updated_at: string;
         };

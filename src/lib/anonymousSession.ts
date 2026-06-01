@@ -41,3 +41,8 @@ export function getNudgeCount(): number {
   if (typeof window === "undefined") return 0;
   return Number(window.localStorage.getItem(NUDGE_KEY) ?? "0");
 }
+
+export function resetNudgeCount(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(NUDGE_KEY);
+}
