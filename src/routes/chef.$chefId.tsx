@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
-import { chefTierLabel } from "@/lib/chefTier";
+// chefTierLabel intentionally not displayed on the profile hero for the freeze.
 import { BackLink } from "@/components/BackLink";
 import { getChefHeartTotal, countHearts } from "@/lib/hearts";
 
