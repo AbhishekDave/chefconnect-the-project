@@ -362,7 +362,13 @@ function TablePage() {
               ? table.restaurant.name
               : chefs.map((c, i) => (
                   <span key={c.id}>
-                    {firstName(c.full_name)}
+                    <Link
+                      to="/chef/$chefId"
+                      params={{ chefId: c.id }}
+                      className="underline decoration-ember/30 decoration-1 underline-offset-4 transition-colors hover:decoration-ember"
+                    >
+                      {firstName(c.full_name)}
+                    </Link>
                     {i < chefs.length - 1 ? <span className="text-ink/40">, </span> : "."}
                   </span>
                 ))}
