@@ -58,6 +58,7 @@ export const Route = createFileRoute("/")({
 function Landing() {
   return (
     <main className="min-h-screen bg-background text-foreground">
+      <SiteHeader />
       <Hero />
       <WhatWeSolve />
       <HowItWorks />
@@ -68,6 +69,36 @@ function Landing() {
       <FinalCta />
       <Footer />
     </main>
+  );
+}
+
+function SiteHeader() {
+  const linkCls =
+    "text-sm text-foreground/80 transition hover:text-foreground";
+  return (
+    <header className="border-b border-border bg-background">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
+        <Link to="/" className="font-serif text-lg text-foreground">
+          Cheftoman
+        </Link>
+        <nav className="hidden items-center gap-6 md:flex">
+          <a href="#how-it-works" className={linkCls}>How it works</a>
+          <a href="#for-chefs" className={linkCls}>For chefs</a>
+          <a href="#for-owners" className={linkCls}>For owners</a>
+          <Link
+            to="/table/$tableId"
+            params={{ tableId: "trattoria-demo-t01" }}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={linkCls}
+          >
+            See a live table
+          </Link>
+          <Link to="/auth" className={linkCls}>Sign in</Link>
+        </nav>
+        <Link to="/auth" className={linkCls + " md:hidden"}>Sign in</Link>
+      </div>
+    </header>
   );
 }
 
