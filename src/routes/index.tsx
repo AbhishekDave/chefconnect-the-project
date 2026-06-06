@@ -225,7 +225,7 @@ function HowItWorks() {
     },
   ];
   return (
-    <section className="bg-accent/40">
+    <section id="how-it-works" className="scroll-mt-16 bg-accent/40">
       <div className="mx-auto max-w-5xl px-6 py-14">
         <h2 className="font-serif text-3xl sm:text-4xl">How it works</h2>
         <ol className="mt-8 grid gap-6 md:grid-cols-3">
@@ -286,7 +286,7 @@ function ForYourKitchen() {
     "Owner dashboard with a venue-wide Love Meter and per-chef breakdown",
   ];
   return (
-    <section className="bg-charcoal text-cream">
+    <section id="for-chefs" className="scroll-mt-16 bg-charcoal text-cream">
       <div className="mx-auto max-w-5xl px-6 py-14">
         <h2 className="max-w-2xl font-serif text-3xl text-cream sm:text-4xl">
           For your kitchen
@@ -312,7 +312,7 @@ function ForYourKitchen() {
 
 function FreePilot() {
   return (
-    <section className="mx-auto max-w-4xl px-6 py-14">
+    <section id="for-owners" className="mx-auto max-w-4xl scroll-mt-16 px-6 py-14">
       <div className="rounded-2xl border border-border bg-card p-8 sm:p-10">
         <p className="text-xs uppercase tracking-[0.18em] text-primary">
           Free pilot
@@ -380,7 +380,7 @@ function LeadForm() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               className={inputClass}
-              placeholder="Alex Garcia"
+              placeholder="Anna Schmidt"
             />
           </label>
           <label className="grid gap-1.5">
@@ -390,7 +390,7 @@ function LeadForm() {
               value={restaurant}
               onChange={(e) => setRestaurant(e.target.value)}
               className={inputClass}
-              placeholder="La Cantina"
+              placeholder="Weinhaus Hubertus"
             />
           </label>
           <label className="grid gap-1.5">
@@ -400,7 +400,7 @@ function LeadForm() {
               value={city}
               onChange={(e) => setCity(e.target.value)}
               className={inputClass}
-              placeholder="Barcelona"
+              placeholder="Koblenz"
             />
           </label>
           <label className="grid gap-1.5">
@@ -411,7 +411,7 @@ function LeadForm() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               className={inputClass}
-              placeholder="+34 600 000 000"
+              placeholder="+49 151 2345678"
             />
           </label>
           <button
