@@ -245,8 +245,9 @@ function RestaurantPage() {
                       loading="lazy"
                     />
                   ) : (
-                    <div className="grid size-20 shrink-0 place-items-center rounded-lg bg-secondary font-serif text-2xl text-secondary-foreground">
-                      {d.dish_name.charAt(0)}
+                    <div className="flex size-20 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-ember/25 bg-ember/8">
+                      <span aria-hidden className="font-serif text-xl text-ember/50">◯</span>
+                      <span className="text-[9px] uppercase tracking-wider text-ember/50">photo soon</span>
                     </div>
                   )}
                   <div className="flex min-w-0 flex-1 flex-col">
