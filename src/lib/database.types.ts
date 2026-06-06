@@ -172,6 +172,7 @@ export type Database = {
           note_content: string;
           anonymous_session_token: string | null;
           from_foodie_id: string | null;
+          is_public: boolean | null;
           created_at: string;
         };
         Insert: {
@@ -180,6 +181,7 @@ export type Database = {
           note_content: string;
           anonymous_session_token?: string | null;
           from_foodie_id?: string | null;
+          is_public?: boolean | null;
         };
         Update: Partial<Database["public"]["Tables"]["thank_you_notes"]["Insert"]>;
         Relationships: [];
