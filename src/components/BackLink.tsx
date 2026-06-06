@@ -1,9 +1,11 @@
-import { Link, useRouter } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 
 /**
  * Contextual back navigation. Prefers real browser history; falls back to a
- * provided parent route. Used in place of the hardcoded "← Home" links so
- * table → restaurant → chef navigation doesn't jump straight to /.
+ * provided parent route. Uses window.history.back() directly because
+ * TanStack's router.history.back() occasionally requires two presses when
+ * the current route normalized its search params on mount (zod defaults,
+ * preview SHA params, etc.) which leaves a replace+push pair on the stack.
  */
 export function BackLink({
   fallbackTo,
@@ -14,7 +16,6 @@ export function BackLink({
   fallbackParams?: Record<string, string>;
   label?: string;
 }) {
-  const router = useRouter();
   const canGoBack =
     typeof window !== "undefined" && window.history.length > 1;
 
@@ -22,7 +23,7 @@ export function BackLink({
     return (
       <button
         type="button"
-        onClick={() => router.history.back()}
+        onClick={() => window.history.back()}
         className="text-xs text-muted-foreground hover:text-foreground"
       >
         {label}

@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabaseClient";
-import { chefTierLabel } from "@/lib/chefTier";
+// chefTierLabel intentionally not displayed on the profile hero for the freeze.
 import { BackLink } from "@/components/BackLink";
 import { getChefHeartTotal, countHearts } from "@/lib/hearts";
 
@@ -169,9 +169,6 @@ function ChefPage() {
           <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Chef</div>
           <h1 className="font-serif text-5xl leading-[1.05]">{chef.full_name}</h1>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs uppercase tracking-wider text-primary">
-              {chefTierLabel(totalHearts)}
-            </span>
             {primaryRestaurant && (
               <Link
                 to="/restaurant/$slug"
@@ -231,8 +228,9 @@ function ChefPage() {
                       loading="lazy"
                     />
                   ) : (
-                    <div className="grid size-20 shrink-0 place-items-center rounded-lg bg-secondary font-serif text-2xl text-secondary-foreground">
-                      {d.dish_name.charAt(0)}
+                    <div className="flex size-20 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-primary/25 bg-primary/5">
+                      <span aria-hidden className="font-serif text-xl text-primary/50">◯</span>
+                      <span className="text-[9px] uppercase tracking-wider text-primary/50">photo soon</span>
                     </div>
                   )}
                   <div className="flex min-w-0 flex-1 flex-col">

@@ -289,15 +289,7 @@ function DishHeart({ dishId, entryMethod }: { dishId: string; entryMethod: Entry
   );
 }
 
-function scrollToCrew(chefId: string) {
-  const el = document.getElementById(`crew-${chefId}`);
-  if (!el) return;
-  el.scrollIntoView({ behavior: "smooth", block: "center" });
-  el.classList.add("ring-2", "ring-ember", "ring-offset-2", "ring-offset-cream");
-  setTimeout(() => {
-    el.classList.remove("ring-2", "ring-ember", "ring-offset-2", "ring-offset-cream");
-  }, 1400);
-}
+// scrollToCrew removed: "cooked by" chips now link to the chef profile.
 
 function TablePage() {
   const { tableId } = Route.useParams();
@@ -362,7 +354,13 @@ function TablePage() {
               ? table.restaurant.name
               : chefs.map((c, i) => (
                   <span key={c.id}>
-                    {firstName(c.full_name)}
+                    <Link
+                      to="/chef/$chefId"
+                      params={{ chefId: c.id }}
+                      className="underline decoration-ember/30 decoration-1 underline-offset-4 transition-colors hover:decoration-ember"
+                    >
+                      {firstName(c.full_name)}
+                    </Link>
                     {i < chefs.length - 1 ? <span className="text-ink/40">, </span> : "."}
                   </span>
                 ))}
@@ -393,9 +391,13 @@ function TablePage() {
                   {initials(c.full_name)}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-serif text-lg leading-tight text-ink">
+                  <Link
+                    to="/chef/$chefId"
+                    params={{ chefId: c.id }}
+                    className="block truncate font-serif text-lg leading-tight text-ink underline decoration-transparent decoration-1 underline-offset-4 transition-colors hover:decoration-ember/40"
+                  >
                     {c.full_name}
-                  </div>
+                  </Link>
                   <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
                     {c.role}
                   </div>
@@ -437,19 +439,19 @@ function TablePage() {
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <DietaryChips dish={d} />
                       {cookedBy && (
-                        <button
-                          type="button"
-                          onClick={() => scrollToCrew(cookedBy.id)}
+                        <Link
+                          to="/chef/$chefId"
+                          params={{ chefId: cookedBy.id }}
                           className="inline-flex items-center gap-1 rounded-full border border-ember/30 bg-ember/5 px-2 py-0.5 text-[11px] text-ember transition-colors hover:bg-ember/10"
                         >
                           <span className="opacity-60">cooked by</span>
                           <span className="font-medium">{firstName(cookedBy.full_name)}</span>
-                        </button>
+                        </Link>
                       )}
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-2">
-                    <div className="h-14 w-14 overflow-hidden rounded-[10px] bg-accent">
+                    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-[10px] border border-dashed border-ember/25 bg-ember/8">
                       {d.image_url ? (
                         <img
                           src={d.image_url}
@@ -458,9 +460,9 @@ function TablePage() {
                           className="h-full w-full object-cover"
                         />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center font-serif text-xl text-ember/40">
-                          ◐
-                        </div>
+                        <span aria-hidden className="font-serif text-2xl text-ember/40">
+                          ◯
+                        </span>
                       )}
                     </div>
                     <DishHeart dishId={d.id} entryMethod={src} />
