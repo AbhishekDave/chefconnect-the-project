@@ -455,17 +455,96 @@ function FinalCta() {
 }
 
 function Footer() {
+  const linkCls = "hover:text-foreground transition";
   return (
     <footer className="border-t border-border bg-card">
-      <div className="mx-auto flex max-w-5xl flex-col items-start justify-between gap-3 px-6 py-8 sm:flex-row sm:items-center">
-        <div className="font-serif text-xl text-card-foreground">Cheftoman</div>
-        <div className="text-xs text-muted-foreground">
-          © {new Date().getFullYear()} Cheftoman ·{" "}
-          <Link to="/auth" className="underline hover:text-foreground">
-            Restaurant sign-in
-          </Link>
+      <div className="mx-auto grid max-w-5xl gap-10 px-6 py-12 sm:grid-cols-3">
+        <div>
+          <div className="font-serif text-xl text-card-foreground">Cheftoman</div>
+          <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+            Starting in the Koblenz–Bonn–Cologne–Frankfurt region.
+          </p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            We handle your data under GDPR.
+          </p>
+          <p className="mt-6 text-xs text-muted-foreground">
+            © {new Date().getFullYear()} Cheftoman
+          </p>
+        </div>
+        <div>
+          <div className="text-xs font-medium uppercase tracking-[0.18em] text-card-foreground">
+            Talk to us
+          </div>
+          <ul className="mt-3 grid gap-2 text-sm text-muted-foreground">
+            <li>
+              <a href={`mailto:${EMAIL_FALLBACK}`} className={linkCls}>
+                {EMAIL_FALLBACK}
+              </a>
+            </li>
+            <li>
+              <a
+                href={`https://wa.me/${WA_NUMBER}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={linkCls}
+              >
+                WhatsApp
+              </a>
+            </li>
+            <li>
+              <a
+                href="https://instagram.com/cheftoman_official"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={linkCls}
+              >
+                Instagram @cheftoman_official
+              </a>
+            </li>
+            <li>
+              <a
+                href="https://x.com/cheftoman"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={linkCls}
+              >
+                X @cheftoman
+              </a>
+            </li>
+          </ul>
+        </div>
+        <div>
+          <div className="text-xs font-medium uppercase tracking-[0.18em] text-card-foreground">
+            Explore
+          </div>
+          <ul className="mt-3 grid gap-2 text-sm text-muted-foreground">
+            <li>
+              <Link
+                to="/table/$tableId"
+                params={{ tableId: "trattoria-demo-t01" }}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={linkCls}
+              >
+                See a live table
+              </Link>
+            </li>
+            <li>
+              <a href="#how-it-works" className={linkCls}>How it works</a>
+            </li>
+            <li>
+              <Link to="/auth" className={linkCls}>Restaurant sign-in</Link>
+            </li>
+            <li>
+              <Link to="/impressum" className={linkCls}>Impressum</Link>
+            </li>
+            <li>
+              <Link to="/datenschutz" className={linkCls}>Datenschutz</Link>
+            </li>
+          </ul>
         </div>
       </div>
     </footer>
   );
 }
+
