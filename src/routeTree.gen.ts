@@ -9,6 +9,8 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ImpressumRouteImport } from './routes/impressum'
+import { Route as DatenschutzRouteImport } from './routes/datenschutz'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
@@ -18,6 +20,16 @@ import { Route as ChefChefIdRouteImport } from './routes/chef.$chefId'
 import { Route as AuthenticatedOpsRouteImport } from './routes/_authenticated/ops'
 import { Route as AuthenticatedMeRouteImport } from './routes/_authenticated/me'
 
+const ImpressumRoute = ImpressumRouteImport.update({
+  id: '/impressum',
+  path: '/impressum',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DatenschutzRoute = DatenschutzRouteImport.update({
+  id: '/datenschutz',
+  path: '/datenschutz',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
@@ -61,6 +73,8 @@ const AuthenticatedMeRoute = AuthenticatedMeRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/datenschutz': typeof DatenschutzRoute
+  '/impressum': typeof ImpressumRoute
   '/me': typeof AuthenticatedMeRoute
   '/ops': typeof AuthenticatedOpsRoute
   '/chef/$chefId': typeof ChefChefIdRoute
@@ -70,6 +84,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/datenschutz': typeof DatenschutzRoute
+  '/impressum': typeof ImpressumRoute
   '/me': typeof AuthenticatedMeRoute
   '/ops': typeof AuthenticatedOpsRoute
   '/chef/$chefId': typeof ChefChefIdRoute
@@ -81,6 +97,8 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/auth': typeof AuthRoute
+  '/datenschutz': typeof DatenschutzRoute
+  '/impressum': typeof ImpressumRoute
   '/_authenticated/me': typeof AuthenticatedMeRoute
   '/_authenticated/ops': typeof AuthenticatedOpsRoute
   '/chef/$chefId': typeof ChefChefIdRoute
@@ -92,6 +110,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/datenschutz'
+    | '/impressum'
     | '/me'
     | '/ops'
     | '/chef/$chefId'
@@ -101,6 +121,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/datenschutz'
+    | '/impressum'
     | '/me'
     | '/ops'
     | '/chef/$chefId'
@@ -111,6 +133,8 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/datenschutz'
+    | '/impressum'
     | '/_authenticated/me'
     | '/_authenticated/ops'
     | '/chef/$chefId'
@@ -122,6 +146,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthRoute: typeof AuthRoute
+  DatenschutzRoute: typeof DatenschutzRoute
+  ImpressumRoute: typeof ImpressumRoute
   ChefChefIdRoute: typeof ChefChefIdRoute
   RestaurantSlugRoute: typeof RestaurantSlugRoute
   TableTableIdRoute: typeof TableTableIdRoute
@@ -129,6 +155,20 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/impressum': {
+      id: '/impressum'
+      path: '/impressum'
+      fullPath: '/impressum'
+      preLoaderRoute: typeof ImpressumRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/datenschutz': {
+      id: '/datenschutz'
+      path: '/datenschutz'
+      fullPath: '/datenschutz'
+      preLoaderRoute: typeof DatenschutzRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -206,6 +246,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthRoute: AuthRoute,
+  DatenschutzRoute: DatenschutzRoute,
+  ImpressumRoute: ImpressumRoute,
   ChefChefIdRoute: ChefChefIdRoute,
   RestaurantSlugRoute: RestaurantSlugRoute,
   TableTableIdRoute: TableTableIdRoute,
