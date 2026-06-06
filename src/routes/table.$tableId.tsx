@@ -443,19 +443,19 @@ function TablePage() {
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <DietaryChips dish={d} />
                       {cookedBy && (
-                        <button
-                          type="button"
-                          onClick={() => scrollToCrew(cookedBy.id)}
+                        <Link
+                          to="/chef/$chefId"
+                          params={{ chefId: cookedBy.id }}
                           className="inline-flex items-center gap-1 rounded-full border border-ember/30 bg-ember/5 px-2 py-0.5 text-[11px] text-ember transition-colors hover:bg-ember/10"
                         >
                           <span className="opacity-60">cooked by</span>
                           <span className="font-medium">{firstName(cookedBy.full_name)}</span>
-                        </button>
+                        </Link>
                       )}
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-2">
-                    <div className="h-14 w-14 overflow-hidden rounded-[10px] bg-accent">
+                    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-[10px] border border-dashed border-ember/25 bg-ember/8">
                       {d.image_url ? (
                         <img
                           src={d.image_url}
@@ -464,9 +464,9 @@ function TablePage() {
                           className="h-full w-full object-cover"
                         />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center font-serif text-xl text-ember/40">
-                          ◐
-                        </div>
+                        <span aria-hidden className="font-serif text-2xl text-ember/40">
+                          ◯
+                        </span>
                       )}
                     </div>
                     <DishHeart dishId={d.id} entryMethod={src} />
