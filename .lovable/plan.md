@@ -1,102 +1,74 @@
-# Visual-only rebuild — Table page + /ops
 
-Scope: visual + interaction layer only. **No Supabase queries, RPCs, or data wiring change.** All filters/joins stay as they are today, except one additive `.eq("is_public", true)` on the /ops notes feed.
+Small content/visual pass on `src/routes/index.tsx`, plus two new stub route files. No data or logic changes.
 
----
+## 1. Localize the lead form (`LeadForm()` in `src/routes/index.tsx`)
 
-## 1. Design tokens — `src/styles.css`
+| Field | Old placeholder | New placeholder |
+|---|---|---|
+| Your name | `Alex Garcia` | `Anna Schmidt` |
+| Restaurant | `La Cantina` | `Weinhaus Hubertus` |
+| City | `Barcelona` | `Koblenz` |
+| WhatsApp | `+34 600 000 000` | `+49 151 2345678` |
 
-Switch palette to the agreed kitchen-forward system and register the shared animation + shadow tokens.
+Scanned the rest of the file — these are the only Barcelona/+34/La Cantina occurrences.
 
-- `--cream: #FAF5ED`, `--ember: #E0552E`, `--heart: #D9442E`, `--ink: #2B2422`.
-- `--radius: 0.875rem` (14px cards).
-- Register colors in `@theme inline`: `--color-ember`, `--color-heart`, `--color-ink`, `--color-cream` → utilities `bg-ember`, `text-heart`, `text-ink`, `bg-cream`.
-- Shadow token: `--shadow-warm: 0 6px 20px -8px color-mix(in oklab, var(--ember) 25%, transparent)` → utility `shadow-warm`. Replaces all ad-hoc shadows on the two screens.
-- Font tokens: `--font-serif: "Fraunces"`, `--font-sans: "Inter"`. Drop `Instrument Serif`.
-- Keyframes registered as Tailwind animations:
-  - `ember-bloom` (heart fill burst, 600ms)
-  - `pulse-ember` (one-shot halo for /ops realtime, 1500ms)
-  - `note-fly` (thank-you note flies up & off, 800ms)
-  - `slide-in-soft` (notes feed entry, 380ms)
-  - `fade-up` (section entries)
-  - `ticker-pulse` (ambient love meter)
+## 2. Region focus line
 
-## 2. Fonts — `src/routes/__root.tsx`
+> *"Starting in the Koblenz–Bonn–Cologne–Frankfurt region."*
 
-Add Google Fonts `<link>` for **Fraunces** (regular + italic) and **Inter** in the root head `links[]`. Remove the existing `@font-face` blocks from `styles.css`.
+Add once in the hero (small, muted, all caps tracking, directly under the CTA) and once in the footer. Phrased as where we're focused, not where we already operate.
 
-## 3. Unified Heart — `src/components/Heart.tsx` (new)
+## 3. Header anchors
 
-One primitive, three variants:
-- `quiet` — read-only glyph + count (lists, badges).
-- `interactive` — give-once tap target. On tap: fires `ember-bloom`, then awaits `onHeart()`.
-- `pulse` — read-only; plays a one-shot halo when `pulseKey` increments. Used in /ops.
+New thin header inside `Landing()`, above `<Hero />` — wordmark left, anchor links right. Plain `<a>` for hash anchors, TanStack `<Link>` for routes. No mobile nav (anchors hidden on small screens; wordmark + Sign in only).
 
-Render rules:
-- Glyph color = `var(--heart)` when filled, 55%-transparent heart when empty.
-- `count === null` renders `—` (never a misleading "0").
-- Size: `sm | md | lg`.
+| Label | Target |
+|---|---|
+| How it works | `#how-it-works` |
+| For chefs | `#for-chefs` |
+| For owners | `#for-owners` |
+| See a live table | `/table/trattoria-demo-t01` (new tab) |
+| Sign in | `/auth` |
 
-`HeartButton.tsx` stays in place for now (chef/restaurant/marketing pages — Phase 2 batch). The two screens we're rebuilding switch to `<Heart />`.
+Add matching `id` attributes to the existing `HowItWorks`, `ForYourKitchen`, and `FreePilot` `<section>` elements. Section copy itself is unchanged (renaming "For your kitchen" → "For chefs" is held for the full redesign).
 
-## 4. `src/lib/database.types.ts`
+## 4. Real footer
 
-Additive: add `is_public: boolean | null` to `thank_you_notes.Row` and `is_public?: boolean | null` to `Insert`. No other type changes.
+Replace the current minimal `Footer()` with a three-column layout (stacked on mobile). Uses existing `EMAIL_FALLBACK` and `WA_NUMBER` constants.
 
-## 5. Table page — `src/routes/table.$tableId.tsx`
+- **Left — brand**
+  - Wordmark "Cheftoman"
+  - Region focus line
+  - "We handle your data under GDPR."
+  - © {year} Cheftoman
 
-Same queries, same realtime channels, same race guard, same nudge logic. **Only the JSX changes**, plus two additive reads:
-- Extend dishes select to `id, dish_name, description, image_url, dietary_type, is_vegetarian, is_vegan, is_gluten_free, assigned_crew_id` (those columns already exist in the typed schema).
-- Extend crew select to also return `restaurant_crew.id` (the crew-row id, needed to resolve `assigned_crew_id → chef`).
-- Add a `hearts-today` count query: two `count: exact` calls (chef_profile in chefIds, dish in dishIds) filtered by `created_at >= startOfDay()`. Reuses the same realtime channel invalidation we already wire.
+- **Middle — Talk to us**
+  - Email → `mailto:cheftoman_official@outlook.com`
+  - WhatsApp → `https://wa.me/4915123702524`
+  - Instagram → `https://instagram.com/cheftoman_official`
+  - X → `https://x.com/cheftoman`
+  - (Instagram and X handles are intentionally different — used exactly as given.)
 
-Visual layout (top → bottom):
-1. **Verified chip strip** — tiny "Table 4 · NFC verified" tag, ember-on-cream.
-2. **Hero** — Fraunces italic: *"Tonight, your table was looked after by…"* followed by crew first-names inline.
-3. **The kitchen** — section heading "The kitchen tonight". Grid of crew cards (`#crew-{chefId}` anchors). Each card: monogram chip (initials on ember-tint disc), name (Fraunces), role small-caps, `<Heart variant="interactive" />` embedded in the card bottom-right with current count.
-4. **Tonight's dishes** — editorial list. Each row:
-   - Left: serif number `01`, dish name (Fraunces), one-line description (Inter, muted, line-clamp-1), inline chips — dietary chip + **"cooked by {chef}"** chip when `assigned_crew_id` matches a known crew row. Tapping the chip → `document.getElementById(\`crew-{chefId}\`).scrollIntoView({behavior:'smooth', block:'center'})` plus a brief ember outline flash on the target card.
-   - Right: 56×56 rounded thumbnail (or warm placeholder), then `<Heart variant="interactive" size="sm" />`.
-5. **Prove you ate here** — existing `<VisitProofForm />`, rewrapped in a warm card.
-6. **Thank-you ritual** — three-step folded card, single `<form>`:
-   - Step 1: "Who do you want to thank?" → chef chips (multi-state radio).
-   - Step 2 (reveals after pick): Fraunces italic placeholder *"Tell them what they made you feel…"* in a cream textarea. Count nudge bar fills as user types; submit unlocks at 3 chars (existing rule).
-   - Step 3 (on submit): button morphs to a folded note via `animate-note-fly`, then card flips to a Delivered stamp: *"Delivered to {chef}'s pass · 7:42pm"*. Same Supabase insert as today.
-7. **Ambient Love Meter ticker** — sticky bottom-of-content (above NudgeBanner zone): small ember dot + serif sentence *"{N} diners have loved this kitchen tonight"*. Hidden when N is null/0 (warm prompt: *"Be the first heart tonight."*). Uses `animate-ticker-pulse` on the dot.
-8. **NudgeBanner** — unchanged logic, restyled to warm card style.
+- **Right — Explore & Legal**
+  - See a live table → `/table/trattoria-demo-t01`
+  - How it works → `#how-it-works`
+  - Restaurant sign-in → `/auth`
+  - Impressum → `/impressum`
+  - Datenschutz → `/datenschutz`
 
-## 6. /ops — `src/routes/_authenticated/ops.tsx`
+## 5. Stub legal routes (new files)
 
-Same data fetching (chef IDs, dish IDs, table IDs, hearts, notes, connections). Add three additive computed slices, no new tables/columns:
-- `heartsToday` — hearts list filtered to `created_at >= startOfDay()`.
-- `heartsThisWeek` / `notesThisWeek` / `repeatDinersThisWeek` — derived in-memory from the data we already pull (extend hearts query to include `created_at`; notes query already has `created_at`; pull a 7-day slice of `table_connections` filtered server-side by `tableIds`).
-- Notes feed filter: add `.eq("is_public", true)` to the existing notes query (defense-in-depth alongside any RLS).
+Two minimal placeholder pages, same shell, real legal copy added later.
 
-Realtime: keep current `postgres_changes` subscription on `hearts`. Read the `new` payload — if `target_type === 'chef_profile'` increment that chef's `pulseKey`; if `target_type === 'dish'`, resolve the dish's `assigned_crew_id` → crewRow → chefId and bump that chef's `pulseKey`. Also increment a global `topMeterPulseKey`.
+- `src/routes/impressum.tsx` — `createFileRoute("/impressum")`, H1 "Impressum", one line: "Legal disclosure coming soon. For inquiries, contact cheftoman_official@outlook.com.", back link to `/`. `head()` with title + description + `noindex` robots meta.
+- `src/routes/datenschutz.tsx` — `createFileRoute("/datenschutz")`, H1 "Datenschutz", one line: "Our full privacy policy is being prepared. We handle your data under GDPR. For data requests, contact cheftoman_official@outlook.com.", back link to `/`. Same `head()` shape with `noindex`.
 
-Visual layout:
-1. **Top band — Love Meter today.** Full-width warm card. Tiny eyebrow "Tonight at {restaurant}". Big Fraunces number = hearts today. `<Heart variant="pulse" pulseKey={topMeterPulseKey} size="lg" />` to the right. Sub-line: notes today + tables connected today, in muted ink.
-2. **On the pass right now.** Horizontal scroll of crew chips. Each chip: monogram disc on ember-tint, name (Inter medium), `<Heart variant="pulse" pulseKey={chefPulse[chefId] ?? 0} count={heartsToday[chefId]} size="sm" />`. Empty crew → warm prompt.
-3. **Tonight's most loved dishes.** Numbered list, dish name (Fraunces), heart count right-aligned. Ranked live from today's hearts.
-4. **Three weekly tiles.** Grid of three warm cards: *Repeat diners (7d)*, *Hearts (7d)*, *Notes (7d)*. Each: small label, Fraunces number, one-line context.
-5. **Recent thank-you notes (public).** Vertical feed. Each card slides in with `animate-slide-in-soft`. Card: folded-note look, body in Fraunces italic, attribution: *"to Chef {name} · from a diner at table {n}"*. Resolves table number via the table_connections data we already have (best-effort; falls back to "a diner"). "Copy" button per card → clipboard with `"{body}" — to Chef {name} at {restaurant}`. Only public notes are ever rendered or copied.
-6. **Live table connections.** Kept, restyled as warm rows.
+Both use existing tokens (`bg-background`, `text-foreground`, `font-serif`) — no new styles.
 
-Empty states everywhere are warm prompts ("The pass is quiet — first heart of the night coming up.") not raw zeros. `—` only while loading.
+## Out of scope (still deferred to the full marketing-home redesign)
 
-## Out of scope (this batch)
-
-- `/kitchens`, `/cooks`, share-card route, `/ops/notes` page.
-- Chef profile, `/me`, marketing home — next batch after review.
-- Any schema change. The `is_public` field is already in the DB; we only add it to the hand-curated types file.
-
-## Files touched
-
-- `src/styles.css` — tokens, fonts, animations.
-- `src/routes/__root.tsx` — Google Fonts links.
-- `src/components/Heart.tsx` — new.
-- `src/lib/database.types.ts` — add `is_public` to `thank_you_notes`.
-- `src/routes/table.$tableId.tsx` — full JSX rewrite, queries unchanged (additive selects).
-- `src/routes/_authenticated/ops.tsx` — full JSX rewrite, queries unchanged (additive `.eq("is_public", true)` on notes feed, additive `created_at` slicing for weekly tiles).
-
-`HeartButton.tsx`, chef/restaurant/me pages, marketing home — all untouched this batch.
+- Rewriting "For your kitchen" as a real "For chefs" section
+- A dedicated "For owners" section distinct from the pilot card
+- Mobile drawer for header anchors
+- Hero composition / product mocks / three-sided story
+- Real legal copy for Impressum and Datenschutz
