@@ -1,7 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { StickyWhatsApp } from "@/components/marketing/StickyWhatsApp";
-import { ScrollPopup } from "@/components/marketing/ScrollPopup";
 
 const WA_NUMBER = "4915123702524";
 // TODO: swap to info@cheftoman.com when domain email is live
@@ -14,12 +12,6 @@ function buildWaUrl(message: string) {
 function buildMailto(subject: string, body: string) {
   return `mailto:${EMAIL_FALLBACK}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
-
-const HERO_MSG =
-  "Hi Cheftoman — I run a restaurant and I'd love to learn more about the free pilot.";
-const PILOT_MSG =
-  "Hi Cheftoman — I'd like a free sample stand for my restaurant. Can you send details?";
-const FINAL_MSG = "Hi Cheftoman — let's set up the free pilot for my restaurant.";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -69,16 +61,34 @@ function Landing() {
       <Hero />
       <WhatWeSolve />
       <HowItWorks />
-      <span id="popup-sentinel" aria-hidden className="block h-px" />
       <PresenceVerified />
       <ForYourKitchen />
       <FreePilot />
       <LeadForm />
       <FinalCta />
       <Footer />
-      <StickyWhatsApp href={buildWaUrl(HERO_MSG)} />
-      <ScrollPopup href={buildWaUrl(PILOT_MSG)} sentinelId="popup-sentinel" />
     </main>
+  );
+}
+
+/** Single primary conversion path: every CTA scrolls to #lead-form. */
+function PrimaryCta({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <a
+      href="#lead-form"
+      className={
+        "inline-block rounded-md bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 " +
+        className
+      }
+    >
+      {children}
+    </a>
   );
 }
 
@@ -93,33 +103,28 @@ function Hero() {
             "radial-gradient(60% 50% at 80% 0%, color-mix(in oklab, var(--ember) 35%, transparent), transparent 70%)",
         }}
       />
-      <div className="relative mx-auto max-w-3xl px-6 pb-20 pt-24 text-center sm:pt-32">
+      <div className="relative mx-auto max-w-3xl px-6 pb-14 pt-20 text-center sm:pb-16 sm:pt-24">
         <p className="mb-5 inline-block rounded-full border border-cream/20 px-3 py-1 text-xs uppercase tracking-[0.18em] text-cream/70">
           For restaurants
         </p>
-        <h1 className="text-5xl leading-[1.05] text-cream sm:text-6xl">
+        <h1 className="font-serif text-5xl leading-[1.05] text-cream sm:text-6xl">
           Real love from real diners,{" "}
-          <span className="text-primary">straight to your kitchen.</span>
+          <span className="italic text-primary">straight to your kitchen.</span>
         </h1>
         <p className="mx-auto mt-6 max-w-xl text-base text-cream/80 sm:text-lg">
           Cheftoman lets seated diners tap a heart and write a thank-you note that
           lands on your cooks' screens — not on a review network.
         </p>
-        <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <a
-            href={buildWaUrl(HERO_MSG)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full rounded-md bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 sm:w-auto"
-          >
-            Start a free pilot on WhatsApp
-          </a>
-          <a
-            href="#lead-form"
-            className="w-full rounded-md border border-cream/25 px-6 py-3 text-sm font-medium text-cream transition hover:bg-cream/10 sm:w-auto"
-          >
-            Request a free sample stand
-          </a>
+        <div className="mt-8 flex justify-center">
+          <PrimaryCta>Start the free pilot</PrimaryCta>
+        </div>
+
+        {/* Product visual placeholder — real screenshots in the marketing-home build */}
+        <div
+          aria-hidden
+          className="mx-auto mt-12 flex aspect-[16/9] w-full max-w-2xl items-center justify-center rounded-2xl border border-dashed border-cream/20 bg-cream/5 text-xs uppercase tracking-[0.18em] text-cream/40"
+        >
+          Product preview · coming soon
         </div>
       </div>
     </section>
@@ -146,19 +151,19 @@ function WhatWeSolve() {
     },
   ];
   return (
-    <section className="mx-auto max-w-5xl px-6 py-20">
-      <h2 className="max-w-2xl text-3xl sm:text-4xl">What we solve</h2>
+    <section className="mx-auto max-w-5xl px-6 py-14">
+      <h2 className="max-w-2xl font-serif text-3xl sm:text-4xl">What we solve</h2>
       <p className="mt-3 max-w-2xl text-muted-foreground">
         The gap between a happy diner and the team that cooked their meal.
       </p>
-      <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {items.map((i) => (
           <li
             key={i.t}
             className="rounded-xl border border-border bg-card p-5 text-card-foreground"
           >
             <div className="mb-2 h-1 w-8 rounded-full bg-primary" />
-            <h3 className="text-lg">{i.t}</h3>
+            <h3 className="font-serif text-lg">{i.t}</h3>
             <p className="mt-2 text-sm text-muted-foreground">{i.d}</p>
           </li>
         ))}
@@ -187,16 +192,16 @@ function HowItWorks() {
   ];
   return (
     <section className="bg-accent/40">
-      <div className="mx-auto max-w-5xl px-6 py-20">
-        <h2 className="text-3xl sm:text-4xl">How it works</h2>
-        <ol className="mt-10 grid gap-6 md:grid-cols-3">
+      <div className="mx-auto max-w-5xl px-6 py-14">
+        <h2 className="font-serif text-3xl sm:text-4xl">How it works</h2>
+        <ol className="mt-8 grid gap-6 md:grid-cols-3">
           {steps.map((s) => (
             <li
               key={s.n}
               className="rounded-xl border border-border bg-card p-6 text-card-foreground"
             >
               <div className="font-serif text-4xl text-primary">{s.n}</div>
-              <h3 className="mt-3 text-xl">{s.t}</h3>
+              <h3 className="mt-3 font-serif text-xl">{s.t}</h3>
               <p className="mt-2 text-sm text-muted-foreground">{s.d}</p>
             </li>
           ))}
@@ -208,11 +213,11 @@ function HowItWorks() {
 
 function PresenceVerified() {
   return (
-    <section className="mx-auto max-w-4xl px-6 py-20">
+    <section className="mx-auto max-w-4xl px-6 py-14">
       <p className="text-xs uppercase tracking-[0.18em] text-primary">
         The Cheftoman difference
       </p>
-      <h2 className="mt-3 text-3xl sm:text-4xl">
+      <h2 className="mt-3 font-serif text-3xl sm:text-4xl">
         Every heart comes from someone who actually sat at your table.
       </h2>
       <p className="mt-5 max-w-2xl text-muted-foreground">
@@ -248,14 +253,14 @@ function ForYourKitchen() {
   ];
   return (
     <section className="bg-charcoal text-cream">
-      <div className="mx-auto max-w-5xl px-6 py-20">
-        <h2 className="max-w-2xl text-3xl text-cream sm:text-4xl">
+      <div className="mx-auto max-w-5xl px-6 py-14">
+        <h2 className="max-w-2xl font-serif text-3xl text-cream sm:text-4xl">
           For your kitchen
         </h2>
         <p className="mt-3 max-w-2xl text-cream/70">
           Built for the people behind the pass.
         </p>
-        <ul className="mt-10 grid gap-3 sm:grid-cols-2">
+        <ul className="mt-8 grid gap-3 sm:grid-cols-2">
           {benefits.map((b) => (
             <li
               key={b}
@@ -273,12 +278,12 @@ function ForYourKitchen() {
 
 function FreePilot() {
   return (
-    <section className="mx-auto max-w-4xl px-6 py-20">
+    <section className="mx-auto max-w-4xl px-6 py-14">
       <div className="rounded-2xl border border-border bg-card p-8 sm:p-10">
         <p className="text-xs uppercase tracking-[0.18em] text-primary">
           Free pilot
         </p>
-        <h2 className="mt-3 text-3xl text-card-foreground sm:text-4xl">
+        <h2 className="mt-3 font-serif text-3xl text-card-foreground sm:text-4xl">
           Try Cheftoman in your dining room. On us.
         </h2>
         <p className="mt-4 max-w-2xl text-muted-foreground">
@@ -292,34 +297,9 @@ function FreePilot() {
           <li>• Owner ops view with live feeds</li>
           <li>• Cancel anytime, no questions</li>
         </ul>
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <a
-            href={buildWaUrl(PILOT_MSG)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-md bg-primary px-6 py-3 text-center text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            Claim the free pilot on WhatsApp
-          </a>
-          <a
-            href="#lead-form"
-            className="rounded-md border border-border px-6 py-3 text-center text-sm font-medium text-foreground hover:bg-accent"
-          >
-            Or leave your details
-          </a>
+        <div className="mt-8">
+          <PrimaryCta>Claim the free pilot</PrimaryCta>
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">
-          No WhatsApp?{" "}
-          <a
-            href={buildMailto(
-              "Free sample stand — Cheftoman",
-              "Hi Cheftoman — I'd like a free sample stand for my restaurant. Please send details.",
-            )}
-            className="underline hover:text-foreground"
-          >
-            Email us at {EMAIL_FALLBACK}
-          </a>
-        </p>
       </div>
     </section>
   );
@@ -348,9 +328,12 @@ function LeadForm() {
     "w-full rounded-md border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring";
 
   return (
-    <section id="lead-form" className="bg-accent/40">
-      <div className="mx-auto max-w-xl px-6 py-20">
-        <h2 className="text-3xl sm:text-4xl">Request a free sample stand</h2>
+    <section
+      id="lead-form"
+      className="scroll-mt-8 bg-accent/40"
+    >
+      <div className="mx-auto max-w-xl px-6 py-14">
+        <h2 className="font-serif text-3xl sm:text-4xl">Start your free pilot</h2>
         <p className="mt-3 text-muted-foreground">
           Four quick fields. Submitting opens WhatsApp with your details
           prefilled — we'll take it from there.
@@ -412,7 +395,7 @@ function LeadForm() {
               )}
               className="underline hover:text-foreground"
             >
-              Email us instead
+              Email us at {EMAIL_FALLBACK}
             </a>
           </p>
         </form>
@@ -423,21 +406,16 @@ function LeadForm() {
 
 function FinalCta() {
   return (
-    <section className="mx-auto max-w-3xl px-6 py-24 text-center">
-      <h2 className="text-4xl sm:text-5xl">
+    <section className="mx-auto max-w-3xl px-6 py-16 text-center">
+      <h2 className="font-serif text-4xl sm:text-5xl">
         Give your cooks the credit they earned tonight.
       </h2>
       <p className="mx-auto mt-5 max-w-xl text-muted-foreground">
         Set up takes one conversation. The pilot is free.
       </p>
-      <a
-        href={buildWaUrl(FINAL_MSG)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-8 inline-block rounded-md bg-primary px-8 py-4 text-base font-medium text-primary-foreground hover:bg-primary/90"
-      >
-        Start on WhatsApp
-      </a>
+      <div className="mt-8 flex justify-center">
+        <PrimaryCta className="px-8 py-4 text-base">Start the free pilot</PrimaryCta>
+      </div>
     </section>
   );
 }
