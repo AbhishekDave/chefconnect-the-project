@@ -169,9 +169,6 @@ function ChefPage() {
           <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Chef</div>
           <h1 className="font-serif text-5xl leading-[1.05]">{chef.full_name}</h1>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs uppercase tracking-wider text-primary">
-              {chefTierLabel(totalHearts)}
-            </span>
             {primaryRestaurant && (
               <Link
                 to="/restaurant/$slug"
