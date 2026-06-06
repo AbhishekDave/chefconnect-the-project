@@ -149,6 +149,9 @@ function Hero() {
         <div className="mt-8 flex justify-center">
           <PrimaryCta>Start the free pilot</PrimaryCta>
         </div>
+        <p className="mt-6 text-[11px] uppercase tracking-[0.18em] text-cream/60">
+          Starting in the Koblenz–Bonn–Cologne–Frankfurt region.
+        </p>
 
         {/* Product visual placeholder — real screenshots in the marketing-home build */}
         <div
