@@ -289,15 +289,7 @@ function DishHeart({ dishId, entryMethod }: { dishId: string; entryMethod: Entry
   );
 }
 
-function scrollToCrew(chefId: string) {
-  const el = document.getElementById(`crew-${chefId}`);
-  if (!el) return;
-  el.scrollIntoView({ behavior: "smooth", block: "center" });
-  el.classList.add("ring-2", "ring-ember", "ring-offset-2", "ring-offset-cream");
-  setTimeout(() => {
-    el.classList.remove("ring-2", "ring-ember", "ring-offset-2", "ring-offset-cream");
-  }, 1400);
-}
+// scrollToCrew removed: "cooked by" chips now link to the chef profile.
 
 function TablePage() {
   const { tableId } = Route.useParams();
