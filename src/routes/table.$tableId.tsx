@@ -391,9 +391,13 @@ function TablePage() {
                   {initials(c.full_name)}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-serif text-lg leading-tight text-ink">
+                  <Link
+                    to="/chef/$chefId"
+                    params={{ chefId: c.id }}
+                    className="block truncate font-serif text-lg leading-tight text-ink underline decoration-transparent decoration-1 underline-offset-4 transition-colors hover:decoration-ember/40"
+                  >
                     {c.full_name}
-                  </div>
+                  </Link>
                   <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
                     {c.role}
                   </div>
